@@ -368,7 +368,7 @@ function overlay(now) {
     let m = marks.get(n.id);
     if (!m) { m = document.createElement('div'); m.innerHTML = '<i></i><span></span>'; box.append(m); marks.set(n.id, m); }
     m.className = 'mk' + (n.level === 0 ? ' mag' : '') + (sel ? ' sel' : '') + (focus || sel ? ' dot' : '');
-    m.lastChild.textContent = label ? n.label : '';
+    m.lastChild.textContent = !label ? '' : n.rank ? `${n.rank}위 ${n.label} · ${n.sim.toFixed(2)}` : n.label;
     const s = fg.graph2ScreenCoords(n.x, n.y, n.z);
     m.style.transform = `translate(${s.x}px,${s.y}px)`;
     m.style.setProperty('--gap', Math.max(8, n.r * G.dist0 / cam.position.distanceTo(fg.controls().target) * 1.3) + 'px');
@@ -391,42 +391,86 @@ function page2(el) {
 }
 const search = t => { q.value = t; bar.classList.add('open'); magnetize(t); };
 
+// ---------- Jev 유사도 (목업) ----------
+// ponytail: 실제 Jev 결정 모델 대신 그래프 거리 + 프로젝트 적합도로 점수. Jev 연결 시 rankPeople만 교체
+const TOP_K = 4, MAX_MAGS = 5;
+const LEV_W = { 상: 2, 중: 1, 하: 0 };
+function rankPeople(mags) {
+  const cands = new Map();
+  const bump = (p, s, via) => {
+    if (p.hidden) return;
+    const c = cands.get(p) || cands.set(p, { p, s: 0, via: new Set() }).get(p);
+    c.s += s;
+    if (via) c.via.add(via);
+  };
+  for (const m of mags) for (const a of G.adj[m.id]) {
+    if (a.type === 'person') bump(a, 3 + (LEV_W[P[a.id].techs?.find(t => t.name === m.label)?.lev] || 0));  // 직접 연결 (기술이면 숙련도 가중)
+    else for (const b of G.adj[a.id]) if (b.type === 'person') bump(b, 2, a);  // 2단계: 프로젝트 등을 거쳐 연결
+  }
+  for (const c of cands.values()) {  // 지금 작성 중인 프로젝트 적합도
+    const pp = P[c.p.id];
+    if (!pp.techs) continue;  // 가짜 노드
+    c.s += fitTechs(pp).length * .8 + (sameClient(pp) ? 1.5 : 0) + (S.project.roles[pp.job] ? 1 : 0) + pp.level * .2;
+  }
+  return [...cands.values()].sort((a, b) => b.s - a.s).slice(0, TOP_K)
+    .map(c => ({ ...c, sim: 1 - Math.exp(-c.s / 6) }));  // 0~1 유사도처럼 보이게
+}
+// 구성원별로 지금 프로젝트와 가장 관련된 노드 최대 2개: 필요 기술(숙련도 높은 순) → 동일 고객사 프로젝트
+function extras(p) {
+  const pp = P[p.id];
+  if (!pp.techs) return [];
+  const tech = pp.techs.filter(t => S.project.techs.includes(t.name)).sort((a, b) => LEV_W[b.lev] - LEV_W[a.lev]).map(t => G.adj[p.id].find(n => n.id === 'tech:' + t.name));
+  const proj = pp.projects.filter(x => x.client === S.project.client).map(x => G.adj[p.id].find(n => n.id === x.std));
+  return [...tech, ...proj].filter(n => n && n.level > 1).slice(0, 2);
+}
+
 // level 0 = 자석, 1 = 자석에 붙은 노드, 2 = 그 노드의 다른 연결, 3 = 나머지 철가루
 function magnetize(query) {
   const { fg, nodes, links, adj } = G;
   const terms = query.split(/[\s,]+/).filter(Boolean).map(t => t.toLowerCase());
-  nodes.forEach(n => { n.hidden = n.type === 'person' && !S.showBusy && P[n.id].busy; n.level = 3; n.via = null; });
-  // 표준명 부분일치 또는 자유기술 표기 변형 일치(정규화) → 자석
-  const mags = nodes.filter(n => n.type !== 'person' && !n.fake && terms.some(t => {
-    if (n.label.toLowerCase().includes(t)) return true;
-    const a = n.alias.find(a => a.toLowerCase() === t || (t.length > 2 && a.toLowerCase().includes(t)));
-    if (a) n.via = a;
-    return !!a;
-  }));
+  nodes.forEach(n => { n.hidden = n.type === 'person' && !S.showBusy && P[n.id].busy; n.level = 3; n.via = null; n.rank = 0; });
+  // 표준명 또는 자유기술 표기 변형(정규화)과 일치 → 자석. 정확 일치 > 앞부분 일치 > 부분 일치 순으로 최대 MAX_MAGS개
+  // 한 글자 검색어는 정확 일치만 (예: 'a'가 거의 모든 이름에 걸리는 것 방지)
+  const hit = (txt, t) => (txt = txt.toLowerCase()) === t ? 3 : t.length < 2 ? 0 : txt.startsWith(t) ? 2 : txt.includes(t) ? 1 : 0;
+  const mags = nodes.filter(n => n.type !== 'person' && !n.fake).map(n => {
+    let best = 0;
+    for (const t of terms) {
+      best = Math.max(best, hit(n.label, t));
+      for (const a of n.alias) { const h = hit(a, t); if (h > best) { best = h; n.via = a; } }
+    }
+    return [n, best];
+  }).filter(([, b]) => b).sort((a, b) => b[1] - a[1]).slice(0, MAX_MAGS).map(([n]) => n);
   mags.forEach((n, i) => {
     n.level = 0;
-    const a = 2 * Math.PI * i / mags.length, R = mags.length > 1 ? 90 : 0;
+    const a = 2 * Math.PI * i / mags.length, R = mags.length > 1 ? 70 : 0;
     n.fx = R * Math.cos(a); n.fy = R * Math.sin(a); n.fz = 0;
   });
   nodes.forEach(n => { if (n.level) n.fx = n.fy = n.fz = undefined; });
-  for (const lv of [1, 2]) nodes.filter(n => n.level === lv - 1).forEach(n =>
-    adj[n.id].forEach(m => { if (!m.hidden && m.level > lv) m.level = lv; }));
-  nodes.forEach(n => n.r = n.hidden ? .01 : [14, n.type === 'person' ? 4 + P[n.id].rate / 300 : 7, 5, 3.2][n.level]);
-  G.manyLabels = nodes.filter(n => n.level === 1).length > 30;
-  G.active = links.filter(l => !l.source.hidden && !l.target.hidden && l.source.level < 3 && l.target.level < 3
-    && Math.abs(l.source.level - l.target.level) === 1);
+  // 연결된 사람을 전부 붙이면 지저분하므로, Jev 유사도(목업) 상위 TOP_K명과 그 사람을 잇는 핵심 노드만 표시
+  // level 1 = 상위 구성원 + 자석과 구성원을 잇는 중간 노드, level 2 = 구성원별 프로젝트 관련 노드(최대 2개)
+  const top = rankPeople(mags);
+  const isMag = new Set(mags), isTop = new Set(top.map(c => c.p));
+  top.forEach((c, i) => {
+    Object.assign(c.p, { level: 1, rank: i + 1, sim: c.sim });
+    c.via.forEach(v => v.level = Math.min(v.level, 1));
+  });
+  top.forEach(c => extras(c.p).forEach(x => { if (x.level > 2) x.level = 2; }));
+  nodes.forEach(n => n.r = n.hidden ? .01 : [9, n.type === 'person' ? 3 + P[n.id].rate / 450 : 5, 4, 3.2][n.level]);
+  G.manyLabels = false;
+  G.active = links.filter(l => l.source.level < 3 && l.target.level < 3 && !l.source.hidden && !l.target.hidden
+    && (isTop.has(l.source) || isTop.has(l.target) || isMag.has(l.source) || isMag.has(l.target)));
   G.idle = !mags.length;
-  // 검색하면 카메라가 결과 쪽으로 다가가고(420), 지우면 원래 거리로. 지금 방향은 유지
-  const cam = fg.camera().position, now = cam.distanceTo(fg.controls().target), to = G.idle ? G.dist0 : 420;
+  // 검색하면 카메라가 결과 쪽으로 다가가고(560), 지우면 원래 거리로. 지금 방향은 유지
+  const cam = fg.camera().position, now = cam.distanceTo(fg.controls().target), to = G.idle ? G.dist0 : Math.min(G.dist0, 560);  // 원래보다 멀어지지는 않게
   if (G.dist0 && Math.abs(now - to) > 1) fg.cameraPosition({ x: cam.x * to / now, y: cam.y * to / now, z: cam.z * to / now }, { x: 0, y: 0, z: 0 }, 900);
   // 흩어지는 껍질을 카메라보다 멀리: 카메라가 껍질 안쪽에 있으면 카메라와 검색 결과 사이에 가리는 노드가 없음
-  G.shell = Math.max(420, now, to) * 1.5;
+  G.shell = Math.max(560, now, to) * 1.5;
 
   // 링크 데이터를 활성 링크로 교체 (노드 객체는 그대로라 위치 유지). 연결선은 검색했을 때만 보임
   fg.graphData({ nodes, links: G.active });
   fg.d3Force('link').distance(l => Math.min(l.source.level, l.target.level) ? 70 : 60)
-    .strength(l => Math.min(l.source.level, l.target.level) ? .06 : .7);
-  fg.d3Force('charge').strength(n => G.idle ? -14 : n.level < 3 ? -60 : -12);  // 검색 중 나머지는 서로 더 밀어내 흩어지게
+    .strength(l => Math.min(l.source.level, l.target.level) ? .3 : .7);
+  fg.d3Force('charge').strength(n => G.idle ? -14 : n.level < 3 ? -120 : -12);  // 검색 중 나머지는 서로 더 밀어내 흩어지게
   fg.nodeColor(fg.nodeColor()).nodeVal(fg.nodeVal()).nodeVisibility(fg.nodeVisibility());  // 색 · 크기 다시 계산
   fg.d3ReheatSimulation();
 }
