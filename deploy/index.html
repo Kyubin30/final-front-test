@@ -289,7 +289,8 @@ function initGraph() {
     .nodeColor(n => {
       const p = n.type === 'person' && P[n.id];
       const c = n.type === 'proj' ? (n.status === '진행중' ? COLOR.active : COLOR.done) : p ? (p.busy ? COLOR.busy : COLOR.person) : COLOR[n.type];
-      return n.level === 3 ? mute(c, p ? .6 : .45) : c;  // 구성원은 흐려져도 밝게
+      // 대기 중 철가루는 흐리게(구성원은 밝게), 검색 중 관련 없는 노드는 10%로 거의 안 보이게 (빛 번짐 문턱 아래라 빛나지도 않음)
+      return n.level < 3 ? c : mute(c, !G.idle ? .1 : p ? .6 : .45);
     })
     .nodeLabel(n => n.level === 3 ? esc(n.label) : '')  // 라벨 없는 철가루만 호버 툴팁
     .linkColor(l => Math.min(l.source.level, l.target.level) ? 'rgba(190,200,225,.35)' : 'rgba(120,165,255,.8)')
@@ -320,7 +321,7 @@ function initGraph() {
   controls.autoRotateSpeed = 60 / ORBIT_SEC;  // OrbitControls: 2.0 = 30초/바퀴
   controls.enableDamping = true;
 
-  G = { fg, el, nodes, links, adj, active: [], idle: true, shell: 220, marks: new Map(), dist0: 0 };
+  G = { fg, el, nodes, links, adj, active: [], idle: true, shell: 420, marks: new Map(), dist0: 0 };
   magnetize('');
   fg.cameraPosition({ x: 0, y: 0, z: FAKE ? 1400 : 520 });
   G.dist0 = FAKE ? 1400 : 520;
@@ -336,7 +337,7 @@ function initGraph() {
   // 노드 빛남: UnrealBloomPass 후처리. 3d-force-graph에 번들된 three와 같은 r186 (jsdelivr +esm이 'three'를 같은 버전으로 연결)
   Promise.all([import('https://cdn.jsdelivr.net/npm/three@0.186.0/+esm'),
                import('https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/postprocessing/UnrealBloomPass.js/+esm')])
-    .then(([{ Vector2 }, { UnrealBloomPass }]) => fg.postProcessingComposer().addPass(new UnrealBloomPass(new Vector2(innerWidth, innerHeight), 1.1, .5, .05)))
+    .then(([{ Vector2 }, { UnrealBloomPass }]) => fg.postProcessingComposer().addPass(new UnrealBloomPass(new Vector2(innerWidth, innerHeight), 1.1, .5, .12)))
     .catch(() => {});  // 불러오기 실패해도 그래프는 빛 없이 동작
 }
 
@@ -415,12 +416,17 @@ function magnetize(query) {
   G.active = links.filter(l => !l.source.hidden && !l.target.hidden && l.source.level < 3 && l.target.level < 3
     && Math.abs(l.source.level - l.target.level) === 1);
   G.idle = !mags.length;
+  // 검색하면 카메라가 결과 쪽으로 다가가고(420), 지우면 원래 거리로. 지금 방향은 유지
+  const cam = fg.camera().position, now = cam.distanceTo(fg.controls().target), to = G.idle ? G.dist0 : 420;
+  if (G.dist0 && Math.abs(now - to) > 1) fg.cameraPosition({ x: cam.x * to / now, y: cam.y * to / now, z: cam.z * to / now }, { x: 0, y: 0, z: 0 }, 900);
+  // 흩어지는 껍질을 카메라보다 멀리: 카메라가 껍질 안쪽에 있으면 카메라와 검색 결과 사이에 가리는 노드가 없음
+  G.shell = Math.max(420, now, to) * 1.5;
 
   // 링크 데이터를 활성 링크로 교체 (노드 객체는 그대로라 위치 유지). 연결선은 검색했을 때만 보임
   fg.graphData({ nodes, links: G.active });
   fg.d3Force('link').distance(l => Math.min(l.source.level, l.target.level) ? 70 : 60)
     .strength(l => Math.min(l.source.level, l.target.level) ? .06 : .7);
-  fg.d3Force('charge').strength(n => G.idle ? -14 : n.level < 3 ? -60 : -3);
+  fg.d3Force('charge').strength(n => G.idle ? -14 : n.level < 3 ? -60 : -12);  // 검색 중 나머지는 서로 더 밀어내 흩어지게
   fg.nodeColor(fg.nodeColor()).nodeVal(fg.nodeVal()).nodeVisibility(fg.nodeVisibility());  // 색 · 크기 다시 계산
   fg.d3ReheatSimulation();
 }
