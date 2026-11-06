@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PM 인재 매니징</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="profiles.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* JevRA 토큰 (Figma 01 / JevRA · Ambient home) */
+  :root { --paper:#fefefd; --grid:#f2f2f0; --card:#fff; --ink:#30332f; --mute:#757b75; --line:#e9eae7;
+          --shadow:0 12px 40px rgba(51,43,33,.07); --fill:#f5f5f2;
+          --n-job:#0d9488; --n-skill:#2f6fed; --n-company:#7c3aed; --n-project:#16a34a; --n-project-active:#ea580c; --n-person:#3f3f3f; --n-person-active:#f59e0b;
+          --acc:var(--n-skill); --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --vio:var(--n-company); --teal:var(--n-job); }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif; color:var(--ink); min-height:100vh;
+         background:linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px) var(--paper);
+         background-size:32px 32px; }
+  header { position:fixed; top:0; left:0; right:0; z-index:10; display:flex; align-items:center; gap:24px; padding:32px 32px 0 40px; pointer-events:none; }
+  header > * { pointer-events:auto; }
+  .brand { font:600 25px/1.4 Inter,sans-serif; color:var(--ink); text-decoration:none; margin-right:auto; }
+  .cmdbar, .ctrls { display:flex; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:99px; }
+  .cmdbar { gap:8px; padding:8px; box-shadow:var(--shadow); }
+  /* 돋보기 → 알약이 왼쪽으로 늘어나며 검색창이 열림 */
+  .cmdbar input { width:0; padding:0; border:0; background:none; outline:none; visibility:hidden;
+                  transition:width .35s cubic-bezier(.2,.8,.2,1), padding .35s cubic-bezier(.2,.8,.2,1), visibility .35s; }
+  .cmdbar input:hover, .cmdbar input:focus { background:none; box-shadow:none; }  /* 알약 자체가 입력창이라 포커스 링 없음 */
+  .cmdbar.open input { width:min(340px, calc(100vw - 640px)); padding:0 4px 0 16px; visibility:visible; }
+  .act { display:flex; padding:14px; border-radius:99px; background:none; color:var(--ink); }
+  .act:hover, .act.on { background:var(--grid); }
+  .act svg, .ctrls svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:20px; margin-bottom:16px; box-shadow:var(--shadow); }
+  /* 입력: 테두리 없이 옅은 면, 포커스 때만 떠오름 */
+  label { display:block; font-size:12px; color:var(--mute); margin:14px 0 6px; }
+  input, textarea, select { width:100%; padding:10px 12px; border:1px solid transparent; border-radius:12px; font:inherit; font-size:14px; color:var(--ink);
+    background:var(--fill); outline:none; transition:background .15s, border-color .15s, box-shadow .15s; }
+  input:hover, textarea:hover, select:hover { background:#efefeb; }
+  input:focus, textarea:focus, select:focus { background:var(--card); border-color:var(--line); box-shadow:0 0 0 4px rgba(48,51,47,.05); }
+  textarea { resize:none; }
+  select { appearance:none; padding-right:32px; cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23757b75' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; }
+  button { padding:8px 16px; border:0; border-radius:99px; background:var(--ink); color:#fff; font:inherit; font-size:14px; cursor:pointer; }
+  button.ghost { background:var(--card); color:var(--ink); border:1px solid var(--line); }
+  button:disabled { opacity:.4; cursor:default; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }
+  /* 직무 · 기술: 체크박스 대신 눌러서 켜는 타일/칩 */
+  .posgrid, .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .posgrid label, .chips label { margin:0; display:flex; gap:8px; align-items:center; padding:6px 12px; border-radius:99px; background:var(--fill);
+    color:var(--ink); font-size:13px; cursor:pointer; user-select:none; transition:background .15s, color .15s; }
+  .posgrid label:hover, .chips label:hover { background:#efefeb; }
+  .posgrid input[type=checkbox], .chips input { display:none; }
+  .posgrid label:has(:checked), .chips label:has(:checked) { background:var(--ink); color:#fff; }
+  .posgrid input[type=number] { display:none; width:40px; padding:0 4px; border-radius:99px; background:rgba(255,255,255,.16); color:#fff; text-align:center; font-size:12px; }
+  .posgrid label:has(:checked) input[type=number] { display:block; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:6px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { color:var(--mute); font-weight:500; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; background:#eef2ff; color:var(--acc); white-space:nowrap; }
+  .tag.busy { background:#fef3c7; color:var(--warn); }
+  .tag.done { background:#dcfce7; color:var(--ok); }
+  .tag.bad { background:#fee2e2; color:var(--bad); }
+  .tag.gray { background:#f3f4f6; color:var(--mute); }
+  .tag.vio { background:#ede9fe; color:var(--vio); }
+  /* SPA: 그래프 캔버스는 항상 배경, 탭은 오른쪽 패널(#app) 내용만 바꿈 */
+  #cy { position:fixed; inset:0; width:100%; height:100%; cursor:pointer; touch-action:none; }
+  /* 오른쪽 컨테이너는 하나: 테두리는 고정, 안쪽만 스크롤. 페이지 안의 .card는 구분선으로만 나뉜 섹션 */
+  #app { position:fixed; z-index:5; top:120px; right:32px; bottom:88px; width:var(--pw, 400px); padding:20px; overflow:auto; overscroll-behavior:contain;
+         background:var(--card); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); transition:width .35s cubic-bezier(.2,.8,.2,1); }
+  #app { scrollbar-width:thin; scrollbar-color:#dcdcd7 transparent; }
+  body.nopanel #app { display:none; }
+  #app .card { margin:0; padding:0; border:0; border-radius:0; box-shadow:none; background:none; }
+  #app .card + .card { margin-top:20px; padding-top:20px; border-top:1px solid var(--line); }
+  #app h2 { font-size:18px; margin:0 0 4px; }
+  #app .tablewrap { overflow-x:auto; }
+  /* 하단 버튼 줄은 스크롤해도 컨테이너 바닥에 붙어 있음 */
+  .foot { position:sticky; bottom:-20px; z-index:2; display:flex; gap:8px; justify-content:flex-end; align-items:center; flex-wrap:wrap;
+          margin:16px -20px 0; padding:12px 20px 16px; background:linear-gradient(rgba(255,255,255,0), var(--card) 14px); }
+  /* 사람 아이콘 섹션의 단계 전환: 컨테이너 맨 위에 붙어 있음 */
+  .seg { position:sticky; top:-20px; z-index:2; display:flex; gap:4px; margin:-20px -20px 16px; padding:16px 20px 12px; background:var(--card); }
+  .seg a { padding:6px 14px; border-radius:99px; color:var(--mute); text-decoration:none; font-size:13px; background:var(--fill); }
+  .seg a.on { background:var(--ink); color:#fff; }
+  .legend { position:fixed; z-index:5; left:40px; bottom:44px; display:flex; gap:16px; flex-wrap:wrap; font-size:10px; line-height:1.5; color:var(--mute); }
+  .legend span { display:flex; align-items:center; gap:6px; }
+  .legend i { width:8px; height:8px; border-radius:50%; }
+  .ctrls { position:fixed; z-index:5; right:40px; bottom:24px; gap:16px; padding:12px; color:var(--ink); }
+  .ctrls button { display:flex; padding:0; background:none; color:inherit; }
+  .ctrls b { font:500 11px/1.4 Inter,sans-serif; color:var(--mute); min-width:32px; text-align:center; }
+  #team { flex:0 1 auto; max-height:55%; }
+  #side { flex:1 1 auto; }
+  #side h4 { margin:16px 0 6px; font-size:13px; }
+  .slot { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--line); font-size:13px; }
+  .slot .who { flex:1; cursor:pointer; }
+  .slot .x { background:none; color:var(--mute); padding:0 4px; }
+  .raw { color:var(--mute); text-decoration:line-through dotted; }
+  .ctx { white-space:pre-wrap; font-size:12px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:6px 8px; margin:4px 0; }
+  .over { color:var(--bad); }
+  pre { background:#111827; color:#e5e7eb; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .stars button { background:none; color:#d1d5db; padding:0 2px; font-size:18px; }
+  .stars button.on { color:#f59e0b; }
+  .muted { color:var(--mute); font-size:13px; }
+  @media (max-width:900px) {
+    header { padding:16px 16px 0; gap:12px; }
+    .grid2 { grid-template-columns:1fr; }
+    .cmdbar.open input { width:calc(100vw - 260px); } .legend { display:none; }
+    #app { top:auto; left:16px; right:16px; bottom:76px; width:auto; height:50vh; } .ctrls { right:16px; bottom:16px; }
+  }
+  @media print { body { background:#fff; } header, .noprint, #cy, .legend { display:none !important; }
+    #app { position:static; width:auto; overflow:visible; border:0; box-shadow:none; } .card { border:0; box-shadow:none; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="#1">JevRA</a>
+    <div class="cmdbar" id="cmdbar">
+    <input id="q" placeholder="검색어를 입력하세요" aria-label="인재 그래프 검색">
+    <button class="act" id="proj" title="프로젝트 계획 · 인재 등록" aria-label="프로젝트 계획"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
+    <button class="act" id="plan" title="계획 확인 · 계획서 출력" aria-label="계획서"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+    <button class="act" id="find" title="인재 그래프 검색" aria-label="검색"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></button>
+  </div>
+</header>
+<canvas id="cy"></canvas>
+<div class="legend" id="legend"></div>
+<div class="ctrls noprint">
+  <button id="spin" aria-label="회전 일시정지"><svg viewBox="0 0 24 24"></svg></button>
+  <b id="zoom" title="휠로 확대/축소">100%</b>
+  <button id="more" aria-label="패널 숨기기/보기" title="패널 숨기기/보기"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+</div>
+<main id="app"></main>
+
+<script>
+const P = Object.fromEntries(PEOPLE.map(p => [p.id, p]));
+const PJ = Object.fromEntries(PROJECTS.map(p => [p.id, p]));
+const man = n => n.toLocaleString() + '만원';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ROUTE_TAG = { '자동 반영': 'done', '재검토': 'busy', '사람 확인': 'bad' };
+const confTag = (c, r) => `<span class="tag ${ROUTE_TAG[r]}" title="Jev 확신도 · ${r}">${c.toFixed(2)} ${r}</span>`;
+
+// ponytail: 목업이라 상태는 localStorage 하나, 실제 구현 시 백엔드로
+const DEFAULT = { project: { name: 'SKT 에이닷 비즈 고도화 2차', desc: 'LLM 기반 멤버사 확산 기능 고도화', client: '에스케이텔레콤(주)', domain: '통신',
+                  months: 6, budget: 45000, roles: { 'AI': 2, 'Software Development': 2, 'Project Management': 1 }, techs: ['Python', 'LangChain', 'Kubernetes'] },
+                  selected: [], status: '작성중', showBusy: false, reviews: {}, closed: {} };
+let S;
+try { S = JSON.parse(localStorage.getItem('pm_talent')) || structuredClone(DEFAULT); } catch { S = structuredClone(DEFAULT); }
+const save = () => { try { localStorage.setItem('pm_talent', JSON.stringify(S)); } catch {} };
+
+// 커맨드 바: 사람 = 프로젝트 계획 · 인재 등록, 목록 = 계획 확인 · 출력, 검색 = 그래프 검색
+// ponytail: 관리자(#4, 평가 · 인재 등록)는 미구현 단계라 메뉴 없음. 해시로만 접근
+const proj = document.getElementById('proj'), plan = document.getElementById('plan');
+proj.onclick = () => location.hash = '#1';
+plan.onclick = () => location.hash = '#3';
+const bar = document.getElementById('cmdbar'), q = document.getElementById('q');
+const openSearch = () => { bar.classList.add('open'); q.focus(); };
+const closeSearch = () => { if (!q.value) bar.classList.remove('open'); };
+document.getElementById('find').onpointerdown = e => e.preventDefault();  // 검색창 blur로 먼저 닫히지 않게
+document.getElementById('find').onclick = () => bar.classList.contains('open') && !q.value ? bar.classList.remove('open') : openSearch();
+q.oninput = () => magnetize(q.value);
+q.onblur = closeSearch;
+q.onkeydown = e => { if (e.key === 'Escape') { q.value = ''; q.oninput(); q.blur(); } };
+
+const PAGES = { 1: ['프로젝트 계획', page1], 2: ['인재 등록', page2], 3: ['계획서', page3], 4: ['관리자', page4] };
+function route() {
+  const k = PAGES[location.hash.slice(1)] ? location.hash.slice(1) : '1';
+  proj.classList.toggle('on', k === '1' || k === '2');
+  plan.classList.toggle('on', k === '3');
+  const app = document.getElementById('app');
+  app.dataset.page = k;
+  app.style.setProperty('--pw', PANEL_W[k] + 'px');
+  document.body.classList.remove('nopanel');
+  PAGES[k][1](app);
+  if (k === '1' || k === '2')
+    app.insertAdjacentHTML('afterbegin', `<nav class="seg noprint">${['1', '2'].map(t => `<a href="#${t}" class="${t === k ? 'on' : ''}">${t}. ${PAGES[t][0]}</a>`).join('')}</nav>`);
+  G.tx = center();  // 패널 폭이 바뀌면 그래프 중심이 부드럽게 따라감
+}
+const PANEL_W = { 1: 460, 2: 400, 3: 680, 4: 560 };
+// 오른쪽 패널을 뺀 영역의 가운데 (Figma에서도 궤도가 왼쪽에 치우쳐 있음)
+const center = () => document.body.classList.contains('nopanel') || G.w <= 900 ? G.w / 2
+  : (G.w - 32 - parseFloat(getComputedStyle(document.getElementById('app')).getPropertyValue('--pw'))) / 2;
+// 노드 상세는 2번 패널에 있으므로, 다른 탭에서 노드를 누르면 2번으로 전환 (hashchange 없이 즉시)
+const goto = k => { if (location.hash !== '#' + k) { history.pushState(null, '', '#' + k); route(); } };
+addEventListener('hashchange', route);
+
+const cost = id => P[id].rate * S.project.months;
+const total = () => S.selected.reduce((s, id) => s + cost(id), 0);
+const fitTechs = p => S.project.techs.filter(t => p.techs.some(x => x.name === t));
+const sameClient = p => p.projects.some(x => x.client === S.project.client);
+
+// ---------- 1. 프로젝트 작성 ----------
+function page1(el) {
+  const pj = S.project;
+  const opt = (list, v) => list.map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('');
+  el.innerHTML = `<div class="card">
+    <h2>프로젝트 계획</h2><p class="muted" style="margin:0">입력하는 즉시 저장됩니다.</p>
+    <label>프로젝트명</label><input id="name" value="${esc(pj.name)}">
+    <label>설명</label><textarea id="desc" rows="2">${esc(pj.desc)}</textarea>
+    <div class="grid2">
+      <div><label>고객사 (표준 목록)</label><select id="client">${opt(Object.keys(CLIENTS), pj.client)}</select></div>
+      <div><label>도메인</label><select id="domain">${opt(DOMAINS, pj.domain)}</select></div>
+      <div><label>기간 (개월)</label><input id="months" type="number" min="1" value="${pj.months}"></div>
+      <div><label>예산 (만원, 내부단가 × 기간 합계 기준)</label><input id="budget" type="number" step="1000" value="${pj.budget}"></div>
+    </div>
+    <label>필요 직무 · 인원</label>
+    <div class="posgrid">${JOBS.map(j => `<label>
+      <input type="checkbox" data-job="${j}" ${pj.roles[j] ? 'checked' : ''}>${j}
+      <input type="number" min="1" max="9" data-n="${j}" value="${pj.roles[j] || 1}" aria-label="${j} 인원"></label>`).join('')}</div>
+    <label>필요 기술 (정형 기술 목록)</label>
+    <div class="chips">${Object.keys(TECHS).map(t => `<label><input type="checkbox" data-tech="${t}" ${pj.techs.includes(t) ? 'checked' : ''}>${t}</label>`).join('')}</div>
+    <div class="foot"><button id="next">다음: 인재 등록 →</button></div>
+  </div>`;
+  el.oninput = () => {
+    const v = id => el.querySelector('#' + id).value;
+    const roles = {};
+    el.querySelectorAll('[data-job]:checked').forEach(c => roles[c.dataset.job] = +el.querySelector(`[data-n="${c.dataset.job}"]`).value || 1);
+    S.project = { name: v('name').trim() || '이름 없는 프로젝트', desc: v('desc'), client: v('client'), domain: v('domain'),
+                  months: +v('months') || 1, budget: +v('budget') || 0, roles,
+                  techs: [...el.querySelectorAll('[data-tech]:checked')].map(c => c.dataset.tech) };
+    S.selected = S.selected.filter(id => roles[P[id].job]);
+    save();
+  };
+  el.querySelector('#next').onclick = () => location.hash = '#2';
+}
+
+// ---------- 2. 인재 그래프 ----------
+// 철가루(작은 점) + 자석(검색 매칭 노드) 물리 그래프. d3-force + canvas
+let sim, G;
+const SPIN = 2 * Math.PI / (180 * 60);  // rad/tick, Figma Orbit과 같은 180초에 한 바퀴 (60fps 기준)
+const css = getComputedStyle(document.documentElement), tok = k => css.getPropertyValue('--n-' + k).trim();
+const COLOR = { job: tok('job'), tech: tok('skill'), client: tok('company'), done: tok('project'), active: tok('project-active'), person: tok('person'), busy: tok('person-active') };
+const ICON = { pause: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>', play: '<path d="M5 3l14 9-14 9V3z"/>' };
+// 그래프는 앱 시작 시 한 번만 만들고 모든 탭의 배경으로 계속 돈다
+function initGraph() {
+  const dot = (c, t) => `<span><i style="background:${COLOR[c]}"></i>${t}</span>`;
+  document.getElementById('legend').innerHTML = dot('job', '직무') + dot('tech', '기술') + dot('client', '고객사') + dot('done', '완료 프로젝트')
+    + dot('active', '진행중 프로젝트') + dot('person', '구성원') + dot('busy', '참여중 구성원');
+  const el = document;
+  el.querySelector('#spin svg').innerHTML = ICON.pause;
+  const canvas = el.querySelector('#cy'), dpr = devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;  // ponytail: 리사이즈 대응 안 함, 필요하면 ResizeObserver
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const usedTech = new Set(PEOPLE.flatMap(p => p.techs.map(t => t.name)));
+  const nodes = [
+    ...JOBS.map(j => ({ id: 'job:' + j, label: j, type: 'job', alias: [] })),
+    ...[...usedTech].map(t => ({ id: 'tech:' + t, label: t, type: 'tech', alias: TECHS[t].alias })),
+    ...Object.keys(CLIENTS).map(c => ({ id: 'client:' + c, label: c, type: 'client', alias: CLIENTS[c] })),
+    ...PROJECTS.map(p => ({ id: p.id, label: p.name, type: 'proj', status: p.status, alias: PMS_ALIAS[p.id] })),
+    ...PEOPLE.map(p => ({ id: p.id, label: p.id, type: 'person', alias: [] })),
+  ];
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const links = [
+    ...PEOPLE.flatMap(p => [['job:' + p.job, p.id], ...p.techs.map(t => ['tech:' + t.name, p.id]), ...p.projects.map(x => [x.std, p.id])]),
+    ...PROJECTS.map(p => ['client:' + p.client, p.id]),
+  ].map(([a, b]) => ({ source: byId[a], target: byId[b] }));
+  const adj = Object.fromEntries(nodes.map(n => [n.id, []]));
+  links.forEach(l => { adj[l.source.id].push(l.target); adj[l.target.id].push(l.source); });
+  G = { ctx: canvas.getContext('2d'), w, h, dpr, nodes, links, adj, active: [], cx: w / 2, tx: w / 2, k: 1, paused: false };
+
+  sim = d3.forceSimulation(nodes)
+    .force('charge', d3.forceManyBody())
+    .force('x', d3.forceX(0).strength(.03)).force('y', d3.forceY(0).strength(.03))
+    .force('collide', d3.forceCollide())
+    .force('link', d3.forceLink([]))
+    .force('radial', d3.forceRadial(Math.min(w, h) / 2 - 20))
+    .force('spin', () => {
+      if (G.paused) return;
+      const c = Math.cos(SPIN), s = Math.sin(SPIN);
+      for (const n of nodes) {
+        if (n === G.drag) continue;
+        if (n.fx != null) [n.fx, n.fy] = [n.fx * c - n.fy * s, n.fx * s + n.fy * c];
+        else [n.x, n.y] = [n.x * c - n.y * s, n.x * s + n.y * c];
+      }
+    })
+    .alphaTarget(.02)  // 계속 미세하게 떨리는 철가루 느낌
+    .on('tick', draw);
+
+  // 클릭 = 상세 패널, 드래그 = 노드 끌기
+  let drag = null, moved = false;
+  const at = e => { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left - G.cx) / G.k, (e.clientY - r.top - h / 2) / G.k]; };
+  canvas.onwheel = e => {
+    e.preventDefault();
+    G.k = Math.min(4, Math.max(.3, G.k * Math.exp(-e.deltaY * .001)));
+    el.querySelector('#zoom').textContent = Math.round(G.k * 100) + '%';
+    draw();
+  };
+  el.querySelector('#spin').onclick = e => {
+    G.paused = !G.paused;
+    e.currentTarget.querySelector('svg').innerHTML = G.paused ? ICON.play : ICON.pause;
+    e.currentTarget.ariaLabel = G.paused ? '회전 재개' : '회전 일시정지';
+  };
+  el.querySelector('#more').onclick = () => { document.body.classList.toggle('nopanel'); G.tx = center(); };
+  const hit = (x, y) => nodes.filter(n => !n.hidden).reduce((b, n) => {
+    const d = Math.hypot(n.x - x, n.y - y) - n.r;
+    return d < 6 && (!b || d < b.d) ? { n, d } : b;
+  }, null)?.n;
+  canvas.onpointerdown = e => {
+    const [x, y] = at(e);
+    drag = G.drag = hit(x, y);
+    moved = false;
+    if (drag) canvas.setPointerCapture(e.pointerId);
+  };
+  canvas.onpointermove = e => {
+    const [x, y] = at(e);
+    if (!drag) { G.hover = hit(x, y); return; }
+    moved = true; drag.fx = x; drag.fy = y; sim.alpha(.3).restart();
+  };
+  canvas.onpointerup = () => {
+    if (!drag) return;
+    if (!moved) showNode(drag.id);
+    if (drag.level) { drag.fx = drag.fy = null; }  // 자석(level 0)은 놓은 자리에 고정
+    drag = G.drag = null;
+  };
+
+  magnetize('');
+}
+
+// ---------- 2. 인재 구성 (오른쪽 패널) ----------
+function page2(el) {
+  el.innerHTML = `<div class="card" id="team"></div>
+    <div class="card" id="side"><p class="muted">점을 클릭하세요.</p>
+      <p class="muted">선택한 구성원은 주황 테두리. 검색어가 자유기술 표기(예: k8s, SKT)여도 정규화된 표준 실체로 연결됩니다.</p></div>`;
+  paint();
+}
+const search = t => { q.value = t; bar.classList.add('open'); magnetize(t); };
+
+// level 0 = 자석, 1 = 자석에 붙은 노드, 2 = 그 노드의 다른 연결, 3 = 나머지 철가루
+function magnetize(query) {
+  const { nodes, links, adj, w, h } = G;
+  const terms = query.split(/[\s,]+/).filter(Boolean).map(t => t.toLowerCase());
+  nodes.forEach(n => { n.hidden = n.type === 'person' && !S.showBusy && P[n.id].busy; n.level = 3; n.via = null; });
+  // 표준명 부분일치 또는 자유기술 표기 변형 일치(정규화) → 자석
+  const mags = nodes.filter(n => n.type !== 'person' && terms.some(t => {
+    if (n.label.toLowerCase().includes(t)) return true;
+    const a = n.alias.find(a => a.toLowerCase() === t || (t.length > 2 && a.toLowerCase().includes(t)));
+    if (a) n.via = a;
+    return !!a;
+  }));
+  mags.forEach((n, i) => {
+    n.level = 0;
+    const a = 2 * Math.PI * i / mags.length, R = mags.length > 1 ? Math.min(w, h) / 4 : 0;
+    n.fx = R * Math.cos(a); n.fy = R * Math.sin(a);
+  });
+  nodes.forEach(n => { if (n.level) n.fx = n.fy = null; });
+  for (const lv of [1, 2]) nodes.filter(n => n.level === lv - 1).forEach(n =>
+    adj[n.id].forEach(m => { if (!m.hidden && m.level > lv) m.level = lv; }));
+  nodes.forEach(n => n.r = n.hidden ? 0 : [18, n.type === 'person' ? 4 + P[n.id].rate / 250 : 9, 6, 4][n.level]);  // 철가루는 Figma처럼 같은 크기 점
+  G.manyLabels = nodes.filter(n => n.level === 1).length > 30;
+  G.active = links.filter(l => !l.source.hidden && !l.target.hidden && l.source.level < 3 && l.target.level < 3
+    && Math.abs(l.source.level - l.target.level) === 1);
+
+  const idle = !mags.length;
+  sim.force('link').links(G.active).distance(l => Math.min(l.source.level, l.target.level) ? 70 : 60)
+    .strength(l => Math.min(l.source.level, l.target.level) ? .06 : .7);
+  sim.force('charge').strength(n => idle ? -4 : n.level < 3 ? -60 : -2);
+  sim.force('collide').radius(n => n.r + (idle ? 10 : 1.5));  // 대기 화면은 Figma처럼 성기게
+  sim.force('radial').strength(n => !idle && n.level === 3 ? .1 : 0);
+  sim.alpha(.8).restart();
+}
+
+function draw() {
+  const { ctx, w, h, dpr, nodes, active } = G;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  G.cx += (G.tx - G.cx) * .12;
+  ctx.translate(G.cx, h / 2);
+  ctx.scale(G.k, G.k);
+  ctx.lineWidth = 1;
+  for (const l of active) {
+    ctx.strokeStyle = Math.min(l.source.level, l.target.level) ? 'rgba(148,163,184,.3)' : 'rgba(47,111,237,.35)';
+    ctx.beginPath(); ctx.moveTo(l.source.x, l.source.y); ctx.lineTo(l.target.x, l.target.y); ctx.stroke();
+  }
+  // 철가루를 먼저, 자석을 마지막에 그려 위로 오게
+  for (const n of [...nodes].sort((a, b) => b.level - a.level)) {
+    if (n.hidden) continue;
+    const p = n.type === 'person' && P[n.id];
+    ctx.globalAlpha = n.level === 3 ? .28 : 1;  // Figma Entity/Node Muted = 28%
+    ctx.fillStyle = n.type === 'proj' ? (n.status === '진행중' ? COLOR.active : COLOR.done)
+      : p ? (p.busy ? COLOR.busy : COLOR.person) : COLOR[n.type];
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI); ctx.fill();
+    if (p && S.selected.includes(n.id)) { ctx.strokeStyle = '#f97316'; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 1; }
+    if (n.id === G.focus || (p && S.selected.includes(n.id))) {
+      ctx.globalAlpha = 1; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(n.x, n.y, Math.max(1.5, n.r * .38), 0, 2 * Math.PI); ctx.fill();
+    }
+    // 라벨: 자석은 항상, 나머지는 적을 때만 · 호버/선택 시
+    if (n.level === 0 || n === G.hover || (p && S.selected.includes(n.id)) || (n.level === 1 && !G.manyLabels)) {
+      const inside = n.level === 0 && n.label.length <= 4;  // 긴 이름은 원 아래에
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = inside ? '#fff' : '#30332f';
+      ctx.font = n.level ? '11px "Noto Sans KR",sans-serif' : '700 12px "Noto Sans KR",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x, inside ? n.y + 4 : n.y + n.r + 12);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// 우측 상단: 팀 구성 목록 (직무별 슬롯 + 예산)
+function paint() {
+  const pj = S.project, t = total(), left = pj.budget - t;
+  document.getElementById('team').innerHTML = `
+    <div class="row" style="justify-content:space-between"><b>${esc(pj.name)}</b>
+      <span class="muted">${S.selected.length}/${Object.values(pj.roles).reduce((a, b) => a + b, 0)}명 · ${pj.months}개월</span></div>
+    <div class="muted" style="margin:4px 0">
+      <span class="tag vio" style="cursor:pointer" onclick="search('${esc(pj.client)}')">${esc(pj.client)}</span>
+      ${pj.techs.map(x => `<span class="tag" style="cursor:pointer" onclick="search('${x}')">${x}</span>`).join(' ')}</div>
+    <div style="margin:8px 0">${Object.entries(pj.roles).map(([job, n]) => {
+      const picked = S.selected.filter(id => P[id].job === job);
+      return [...picked.map(id => `<div class="slot"><span class="tag" style="background:#ccfbf1;color:var(--teal)">${job}</span>
+          <span class="who" onclick="showNode('${id}')">${id} <span class="muted">${P[id].grade}</span></span>
+          <span class="muted">${man(cost(id))}</span><button class="x" onclick="toggle('${id}')" aria-label="제외">✕</button></div>`),
+        ...Array(Math.max(0, n - picked.length)).fill(`<div class="slot"><span class="tag" style="background:#ccfbf1;color:var(--teal);cursor:pointer" onclick="search('${job}')">${job}</span><span class="who muted">비어 있음</span></div>`)].join('');
+    }).join('') || '<p class="muted">1페이지에서 직무를 선택하세요</p>'}</div>
+    <div class="row" style="font-size:13px"><span>인건비 <b>${man(t)}</b></span>
+      <span>잔액 <b class="${left < 0 ? 'over' : ''}">${man(left)}</b>${left < 0 ? ' <span class="over">초과</span>' : ''}</span></div>
+    <label style="display:flex;gap:6px;align-items:center;color:var(--ink)">
+      <input type="checkbox" style="width:auto" ${S.showBusy ? 'checked' : ''} onchange="S.showBusy=this.checked;save();magnetize(document.getElementById('q').value)"> 진행중 프로젝트 참여 인재 보기</label>
+    <div class="foot"><button class="ghost" onclick="autoPick()">자동 추천</button>
+      <button class="ghost" onclick="S.selected=[];save();paint()">초기화</button>
+      <button style="margin-left:auto" onclick="location.hash='#3'" ${S.selected.length ? '' : 'disabled'}>계획서로 →</button></div>`;
+}
+
+function toggle(id) {
+  S.selected = S.selected.includes(id) ? S.selected.filter(x => x !== id) : [...S.selected, id];
+  save(); paint(); showNode(id);
+}
+
+const personRow = p => `<tr style="cursor:pointer" onclick="showNode('${p.id}')"><td>${p.id}${p.busy ? ' <span class="tag busy">참여중</span>' : ''}</td>
+  <td>${p.job}</td><td>${p.grade}</td><td class="n">${man(p.rate)}</td></tr>`;
+const personTable = list => `<table><tr><th>구성원</th><th>직무</th><th>등급</th><th class="n">월 단가</th></tr>${list.map(personRow).join('')}</table>`;
+
+function showNode(id) {
+  goto(2);
+  G.focus = id;
+  const side = document.getElementById('side'), [type, key] = id.includes(':') ? id.split(':') : [P[id] ? 'person' : 'proj', id];
+  const visible = p => S.showBusy || !p.busy;
+  if (type === 'job') {
+    side.innerHTML = `<h3 style="margin-top:0">${key} <span class="muted">직무 (정형)</span></h3>
+      ${personTable(PEOPLE.filter(p => p.job === key && visible(p)).sort((a, b) => b.level - a.level))}`;
+  } else if (type === 'tech') {
+    const raws = [...new Set(PEOPLE.flatMap(p => p.projects.flatMap(x => x.techNorm.filter(t => t.std === key).map(t => t.raw))))];
+    const list = PEOPLE.filter(p => visible(p) && p.techs.some(t => t.name === key));
+    side.innerHTML = `<h3 style="margin-top:0">${key} <span class="muted">${TECHS[key].clas}</span></h3>
+      <p class="muted">자유기술에서 이 기술로 정규화된 표기: ${raws.map(r => `<span class="tag gray">${esc(r)}</span>`).join(' ') || '-'}</p>
+      <table><tr><th>구성원</th><th>직무</th><th>숙련도</th></tr>${list.map(p => `<tr style="cursor:pointer" onclick="showNode('${p.id}')">
+        <td>${p.id}${p.busy ? ' <span class="tag busy">참여중</span>' : ''}</td><td>${p.job}</td><td>${p.techs.find(t => t.name === key).lev}</td></tr>`).join('')}</table>`;
+  } else if (type === 'client') {
+    const rows = PEOPLE.flatMap(p => p.projects.filter(x => x.client === key).map(x => x));
+    const raws = [...new Set(rows.map(x => x.clientRaw))];
+    side.innerHTML = `<h3 style="margin-top:0">${esc(key)} <span class="muted">고객사 표준</span></h3>
+      <p class="muted">이 고객사로 묶인 반정형 표기: ${raws.map(r => `<span class="tag gray">${esc(r)}</span>`).join(' ')}</p>
+      <h4>프로젝트</h4><table>${PROJECTS.filter(p => p.client === key).map(p => `<tr style="cursor:pointer" onclick="showNode('${p.id}')">
+        <td>${esc(p.name)}</td><td><span class="tag ${p.status === '완료' ? 'done' : 'busy'}">${p.status}</span></td></tr>`).join('')}</table>`;
+  } else if (type === 'proj') {
+    const pj = PJ[key];
+    const rows = pj.members.map(m => [P[m], P[m].projects.find(x => x.std === key)]);
+    side.innerHTML = `<h3 style="margin-top:0">${esc(pj.name)}</h3>
+      <span class="tag ${pj.status === '완료' ? 'done' : 'busy'}">${pj.status}</span> <span class="tag vio">${esc(pj.client)}</span> <span class="tag gray">${pj.domain}</span>
+      <p class="muted">${pj.start} ~ ${pj.end} · PMS 공식 프로젝트명 (정규화 표준)<br>${pj.techs.map(t => `<span class="tag">${t}</span>`).join(' ')}</p>
+      <h4>구성원이 적은 표기 → 이 프로젝트로 정규화</h4>
+      <table><tr><th>구성원</th><th>프로젝트명 (자유기술)</th><th>확신도</th></tr>${rows.map(([p, x]) => `<tr style="cursor:pointer" onclick="showNode('${p.id}')">
+        <td>${p.id}</td><td>${esc(x.raw)}<div class="muted">${esc(x.role)}</div></td><td>${confTag(x.conf, x.route)}</td></tr>`).join('')}</table>`;
+  } else {
+    const p = P[key], picked = S.selected.includes(p.id), fit = fitTechs(p);
+    side.innerHTML = `<h3 style="margin:0">구성원 ${p.id} ${p.busy ? '<span class="tag busy">진행중 프로젝트 참여</span>' : ''}</h3>
+      <p class="muted">${p.job} · ${p.grade} · ${p.skillset} Lv.${p.level}<br>전체 경력 ${p.career}년 · 근속 ${p.tenure}년 · 직무별 경력 ${p.jobCareer}</p>
+      <div class="row"><div><div class="muted">내부단가 (월)</div><b style="font-size:20px">${man(p.rate)}</b></div>
+        <div><div class="muted">${S.project.months}개월 비용</div><b style="font-size:20px">${man(cost(p.id))}</b></div></div>
+      <p class="muted" style="font-size:11px">※ 단가는 제공 데이터에 없음. 목업은 직무등급 + 스킬셋 수준으로 계산</p>
+      <p>필요 기술 보유 ${fit.length}/${S.project.techs.length} ${fit.map(t => `<span class="tag">${t}</span>`).join(' ')}
+        ${sameClient(p) ? `<br><span class="tag vio">동일 고객사 수행 경험</span>` : ''}</p>
+      <button onclick="toggle('${p.id}')" ${!S.project.roles[p.job] ? 'disabled title="프로젝트에 필요 없는 직무"' : ''}>${picked ? '선택 해제' : '이 구성원 선택'}</button>
+
+      <h4>핵심역량 <span class="tag gray">LLM 요약</span></h4><p class="muted" style="margin:0">${esc(p.core)}</p>
+      <h4>보유기술 (정형 · 숙련도)</h4>
+      <div class="chips">${p.techs.map(t => `<span class="tag" title="${t.clas}">${t.name} · ${t.lev}</span>`).join('')}</div>
+
+      <h4>프로젝트 수행이력 (자유기술 → 정규화)</h4>
+      ${p.projects.map(x => `<div style="border-bottom:1px solid var(--line);padding:6px 0;font-size:13px">
+        <div><span class="raw">${esc(x.raw)}</span> → <a href="#2" onclick="event.preventDefault();showNode('${x.std}')"><b>${esc(PJ[x.std].name)}</b></a> ${confTag(x.conf, x.route)}</div>
+        <div class="muted">고객사 <span class="raw">${esc(x.clientRaw)}</span> → ${esc(x.client)} ${confTag(x.clientConf, x.clientRoute)}</div>
+        <div class="muted">${x.start} ~ ${x.end} · ${esc(x.domain)} · 역할 「${esc(x.role)}」</div>
+        <div class="muted">보유기술 「${esc(x.techRaw)}」 → ${x.techNorm.map(t => t.std ? `<span class="tag">${t.std}</span>` : `<span class="tag gray" title="기술 아님/무의미 값">${esc(t.raw)} 제외</span>`).join(' ')}</div>
+        <div class="muted">주요성과: ${esc(x.perf)}</div></div>`).join('')}
+
+      <h4>주요 경력 (발령/이동 이력)</h4>
+      ${p.careers.map(c => `<div style="font-size:13px"><b>${esc(c.team)}</b> <span class="muted">${c.start} ~ ${c.end}</span><div class="ctx">${esc(c.ctx)}</div></div>`).join('')}
+
+      <h4>자격 및 전문활동</h4>
+      <table>${p.certs.map(c => `<tr><td>${esc(c.name)}</td><td>${c.div}</td><td class="muted">${esc(c.inst)}</td><td class="n">${c.date}</td></tr>`).join('')}
+        ${p.acts.map(a => `<tr><td>${esc(a.name)}</td><td>${a.div}</td><td class="muted">${esc(a.type)}</td><td class="n">${a.date}</td></tr>`).join('')}
+        ${p.awards.map(a => `<tr><td>${esc(a.name)}</td><td>포상</td><td class="muted">${esc(a.inst)}</td><td class="n">${a.date}</td></tr>`).join('')}</table>
+      ${p.certs.length + p.acts.length + p.awards.length ? '' : '<p class="muted">없음</p>'}`;
+  }
+  const app = document.getElementById('app');
+  app.scrollTo({ top: side.offsetTop - 64, behavior: 'smooth' });  // seg 높이만큼 비움
+}
+
+// ponytail: 그리디 추천 (필요기술 숙련도 + 동일 고객사 + 스킬셋 수준 점수, 남은 슬롯 최소비용 남겨두기). 최적해 필요하면 knapsack으로
+function autoPick() {
+  const LEV = { 상: 3, 중: 2, 하: 1 };
+  const score = p => p.techs.filter(t => S.project.techs.includes(t.name)).reduce((s, t) => s + LEV[t.lev], 0) + (sameClient(p) ? 2 : 0) + p.level * .5;
+  const need = Object.entries(S.project.roles);
+  const pool = PEOPLE.filter(p => S.showBusy || !p.busy);
+  const minCost = Math.min(...pool.map(p => cost(p.id)));
+  let left = S.project.budget, slots = need.reduce((s, [, n]) => s + n, 0);
+  S.selected = [];
+  for (const [job, n] of need) for (let i = 0; i < n; i++) {
+    const best = pool.filter(p => p.job === job && !S.selected.includes(p.id) && cost(p.id) <= left - (slots - 1) * minCost)
+                     .sort((a, b) => score(b) - score(a))[0];
+    slots--;
+    if (best) { S.selected.push(best.id); left -= cost(best.id); }
+  }
+  save(); paint();
+}
+
+// ---------- 3. 계획서 ----------
+function page3(el) {
+  const pj = S.project, t = total();
+  const rows = S.selected.map(id => P[id]).sort((a, b) => a.job.localeCompare(b.job));
+  el.innerHTML = `<div class="card">
+    <div class="row"><h2 style="margin:0">${esc(pj.name)}</h2><span class="tag ${S.status === '작성중' ? '' : 'busy'}">${S.status}</span></div>
+    <p>${esc(pj.desc)}</p>
+    <div class="row" style="gap:28px"><div><div class="muted">고객사 · 도메인</div><b>${esc(pj.client)}</b> · ${pj.domain}</div>
+      <div><div class="muted">기간</div><b>${pj.months}개월</b></div>
+      <div><div class="muted">예산</div><b>${man(pj.budget)}</b></div>
+      <div><div class="muted">인건비 합계</div><b>${man(t)}</b></div>
+      <div><div class="muted">잔액</div><b class="${pj.budget < t ? 'over' : ''}">${man(pj.budget - t)}</b></div></div>
+    <p><span class="muted">필요 직무</span> ${Object.entries(pj.roles).map(([k, v]) => `<span class="tag">${k} ×${v}</span>`).join(' ')}
+      <br><span class="muted">필요 기술</span> ${pj.techs.map(x => `<span class="tag">${x}</span>`).join(' ')}</p>
+  </div>
+  <div class="card"><h3 style="margin-top:0">배치 인재 (${rows.length}명)</h3>
+    <div class="tablewrap"><table><tr><th>직무</th><th>구성원</th><th>등급 · 스킬셋</th><th class="n">경력</th><th>필요 기술 보유</th><th>근거</th><th class="n">월 단가</th><th class="n">기간 비용</th></tr>
+    ${rows.map(p => `<tr><td>${p.job}</td><td>${p.id}</td><td>${p.grade}<div class="muted">${p.skillset} Lv.${p.level}</div></td><td class="n">${p.career}년</td>
+      <td>${fitTechs(p).map(x => `<span class="tag">${x}</span>`).join(' ') || '-'}</td>
+      <td>${sameClient(p) ? `<span class="tag vio">동일 고객사</span> ` : ''}<span class="muted">이력 ${p.projects.length}건</span></td>
+      <td class="n">${man(p.rate)}</td><td class="n">${man(cost(p.id))}</td></tr>`).join('')}</table></div>
+    <p class="foot noprint">
+      <button class="ghost" onclick="location.hash='#2'">← 수정</button>
+      <button class="ghost" onclick="print()">계획서 저장 (PDF)</button>
+      <button id="submit" ${S.status !== '작성중' || !rows.length ? 'disabled' : ''}>${S.status === '작성중' ? '승인 신청' : S.status}</button></p>
+  </div>`;
+  el.querySelector('#submit').onclick = () => { S.status = '승인대기'; save(); route(); };
+}
+
+// ---------- 4. 관리자 ----------
+function page4(el) {
+  const mine = S.status !== '작성중' ? [{ id: 'MINE', name: S.project.name, status: S.status, members: S.selected }] : [];
+  const list = [...mine, ...PROJECTS.filter(p => p.status === '진행중').map(p => ({ ...p, status: S.closed[p.id] ? '마감' : p.status }))];
+  el.innerHTML = `<div class="card"><h2 style="margin-top:0">프로젝트 관리</h2>
+    <table><tr><th>프로젝트</th><th class="n">인원</th><th>상태</th><th></th></tr>
+    ${list.map(p => `<tr><td>${esc(p.name)}</td><td class="n">${p.members.length}</td>
+      <td><span class="tag ${p.status === '마감' ? 'done' : 'busy'}">${p.status}</span></td>
+      <td>${p.status === '승인대기' ? `<button onclick="approve()">승인</button>` : p.status === '진행중' ? `<button class="ghost" onclick="review('${p.id}')">마감 · 평가</button>` : ''}</td></tr>`).join('')}
+    </table></div><div id="rv"></div>`;
+}
+function approve() { S.status = '진행중'; save(); route(); }
+
+function review(pid) {
+  const members = pid === 'MINE' ? S.selected : PJ[pid].members;
+  const pj = pid === 'MINE' ? { name: S.project.name, client: S.project.client } : PJ[pid];
+  const rv = S.reviews[pid] ||= Object.fromEntries(members.map(id => [id, { rating: 3, comment: '' }]));
+  const box = document.getElementById('rv');
+  const draw = () => box.innerHTML = `<div class="card"><h3 style="margin-top:0">${esc(pj.name)} — 인재 평가</h3>
+    <table><tr><th>구성원</th><th>직무</th><th>평가</th><th>코멘트</th></tr>
+    ${members.map(id => `<tr><td>${id}</td><td>${P[id].job}</td>
+      <td class="stars">${[1, 2, 3, 4, 5].map(n => `<button class="${n <= rv[id].rating ? 'on' : ''}" data-id="${id}" data-r="${n}" aria-label="${n}점">★</button>`).join('')}</td>
+      <td><input data-c="${id}" value="${esc(rv[id].comment)}" placeholder="한 줄 평가"></td></tr>`).join('')}</table>
+    <p class="row" style="justify-content:flex-end"><button id="close">마감 승인 → 그래프DB 저장</button></p></div>`;
+  draw();
+  box.onclick = e => {
+    if (e.target.dataset.r) { rv[e.target.dataset.id].rating = +e.target.dataset.r; save(); draw(); }
+    if (e.target.id === 'close') {
+      if (pid === 'MINE') S.status = '마감'; else S.closed[pid] = true;
+      save();
+      const q = members.map(id => `MERGE (p:Person {id:'${id}'})
+MERGE (p)-[:HAS_JOB]->(:Job {name:'${P[id].job}'})
+MERGE (p)-[:PARTICIPATED {rating:${rv[id].rating}, comment:'${rv[id].comment.replace(/'/g, "\\'")}'}]->(pr)`).join('\n');
+      page4(document.getElementById('app'));
+      document.getElementById('rv').innerHTML = `<div class="card"><h3 style="margin-top:0">✅ 마감 완료 — 그래프DB 저장 (목업)</h3>
+        <pre>MERGE (pr:Project {name:'${esc(pj.name)}', status:'마감'})-[:FOR_CLIENT]->(:Client {name:'${esc(pj.client)}'})\n${esc(q)}</pre></div>`;
+    }
+  };
+  box.oninput = e => { if (e.target.dataset.c) { rv[e.target.dataset.c].comment = e.target.value; save(); } };
+}
+
+initGraph();
+route();
+</script>
+</body>
+</html>

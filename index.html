@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PM 인재 매니징</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="data.js"></script>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --mute:#6b7280; --line:#e3e6eb; --acc:#2f6fed; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Apple SD Gothic Neo",sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; }
+  nav { display:flex; gap:4px; flex:1; }
+  nav a { padding:6px 12px; border-radius:6px; color:var(--mute); text-decoration:none; font-size:14px; }
+  nav a.on { background:var(--acc); color:#fff; }
+  main { max-width:1200px; margin:0 auto; padding:20px; }
+  main.wide { max-width:none; padding:10px 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:16px; }
+  label { display:block; font-size:13px; color:var(--mute); margin:12px 0 4px; }
+  input, textarea, select { width:100%; padding:8px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  button { padding:8px 14px; border:0; border-radius:6px; background:var(--acc); color:#fff; font:inherit; cursor:pointer; }
+  button.ghost { background:#eef2ff; color:var(--acc); }
+  button:disabled { opacity:.4; cursor:default; }
+  .posgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .posgrid div { display:flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  .posgrid input[type=number] { width:56px; padding:4px; }
+  .posgrid input[type=checkbox] { width:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:6px 8px; border-bottom:1px solid var(--line); text-align:left; }
+  th { color:var(--mute); font-weight:500; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; background:#eef2ff; color:var(--acc); }
+  .tag.busy { background:#fef3c7; color:var(--warn); }
+  .tag.done { background:#dcfce7; color:var(--ok); }
+  .graphwrap { display:grid; grid-template-columns:1fr 360px; gap:10px; height:calc(100vh - 140px); min-height:420px; }
+  #cy { display:block; width:100%; height:100%; cursor:pointer; touch-action:none; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+  .sidecol { display:flex; flex-direction:column; gap:10px; min-height:0; }
+  .sidecol .card { margin:0; padding:14px; overflow:auto; }
+  #team { flex:0 1 auto; max-height:60%; }
+  #side { flex:1; }
+  .slot { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--line); font-size:13px; }
+  .slot .who { flex:1; cursor:pointer; }
+  .slot .x { background:none; color:var(--mute); padding:0 4px; }
+  .over { color:var(--bad); }
+  pre { background:#111827; color:#e5e7eb; padding:12px; border-radius:8px; font-size:12px; overflow:auto; }
+  .stars button { background:none; color:#d1d5db; padding:0 2px; font-size:18px; }
+  .stars button.on { color:#f59e0b; }
+  .muted { color:var(--mute); font-size:13px; }
+  @media (max-width:800px) { .graphwrap { grid-template-columns:1fr; height:auto; } #cy { height:70vh; } }
+  @media print { header, .noprint { display:none !important; } .card { border:0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚾ PM 인재 매니징</h1>
+  <nav id="nav"></nav>
+  <select id="role" style="width:auto">
+    <option value="pm">PM 계정</option>
+    <option value="admin">관리자 계정</option>
+  </select>
+</header>
+<main id="app"></main>
+
+<script>
+const P = Object.fromEntries(PLAYERS.map(p => [p.id, p]));
+const PJ = Object.fromEntries(PROJECTS.map(p => [p.id, p]));
+const won = n => (n * 10000).toLocaleString() + '원';
+const man = n => n.toLocaleString() + '만원';
+
+// ponytail: 목업이라 상태는 localStorage 하나, 실제 구현 시 백엔드로
+const DEFAULT = { project: { name: '2019 우승팀 구성', desc: '타선 강화 중심 라인업', budget: 150000, positions: { '1루수': 1, '2루수': 1, '유격수': 1, '포수': 1 } },
+                  selected: [], status: '작성중', showBusy: false, reviews: {}, closed: {} };
+let S;
+try { S = JSON.parse(localStorage.getItem('pm')) || structuredClone(DEFAULT); } catch { S = structuredClone(DEFAULT); }
+const save = () => { try { localStorage.setItem('pm', JSON.stringify(S)); } catch {} };
+
+const role = document.getElementById('role');
+role.value = location.hash === '#4' ? 'admin' : 'pm';
+role.onchange = () => location.hash = role.value === 'admin' ? '#4' : '#1';
+
+const PAGES = { 1: ['1. 프로젝트 작성', page1], 2: ['2. 인재 그래프', page2], 3: ['3. 계획서', page3], 4: ['관리자', page4] };
+function route() {
+  const k = PAGES[location.hash.slice(1)] ? location.hash.slice(1) : '1';
+  const tabs = role.value === 'admin' ? ['4'] : ['1', '2', '3'];
+  document.getElementById('nav').innerHTML = tabs.map(t => `<a href="#${t}" class="${t === k ? 'on' : ''}">${PAGES[t][0]}</a>`).join('');
+  document.querySelector('main').classList.toggle('wide', k === '2');
+  if (k !== '2') sim?.stop();
+  PAGES[k][1](document.getElementById('app'));
+}
+addEventListener('hashchange', () => { role.value = location.hash === '#4' ? 'admin' : 'pm'; route(); });
+
+const total = () => S.selected.reduce((s, id) => s + P[id].salary, 0);
+
+// ---------- 1. 프로젝트 작성 ----------
+function page1(el) {
+  const pj = S.project;
+  el.innerHTML = `<div class="card">
+    <h2 style="margin-top:0">프로젝트 계획</h2>
+    <label>프로젝트명 (= 팀 구성 목표)</label><input id="name" value="${pj.name}">
+    <label>설명</label><textarea id="desc" rows="2">${pj.desc}</textarea>
+    <label>예산 (만원, 선수 연봉 = 내부단가 합계 기준)</label><input id="budget" type="number" step="1000" value="${pj.budget}">
+    <label>필요 기술 (포지션 · 인원)</label>
+    <div class="posgrid">${POSITIONS.map(pos => `<div>
+      <input type="checkbox" data-pos="${pos}" ${pj.positions[pos] ? 'checked' : ''}>
+      <span style="flex:1">${pos}</span>
+      <input type="number" min="1" max="5" data-n="${pos}" value="${pj.positions[pos] || 1}"></div>`).join('')}</div>
+    <p class="row" style="justify-content:flex-end;margin-bottom:0"><button id="next">다음: 인재 그래프 →</button></p>
+  </div>`;
+  el.querySelector('#next').onclick = () => {
+    const positions = {};
+    el.querySelectorAll('[data-pos]:checked').forEach(c => positions[c.dataset.pos] = +el.querySelector(`[data-n="${c.dataset.pos}"]`).value || 1);
+    S.project = { name: el.querySelector('#name').value.trim() || '이름 없는 프로젝트', desc: el.querySelector('#desc').value,
+                  budget: +el.querySelector('#budget').value || 0, positions };
+    S.selected = S.selected.filter(id => positions[P[id].pos]);
+    save(); location.hash = '#2';
+  };
+}
+
+// ---------- 2. 인재 그래프 ----------
+// 철가루(작은 점) + 자석(검색 매칭 노드) 물리 그래프. d3-force + canvas
+let sim, G;
+const SPIN = .0015;  // rad/tick, 약 70초에 한 바퀴
+function page2(el) {
+  el.innerHTML = `
+    <div class="row noprint" style="margin-bottom:10px">
+      <input id="q" placeholder="프로젝트 · 포지션 검색" style="flex:1">
+      <span class="muted" id="hits"></span>
+    </div>
+    <div class="graphwrap"><canvas id="cy"></canvas>
+      <div class="sidecol"><div class="card" id="team"></div>
+        <div class="card" id="side"><p class="muted">점을 클릭하세요.<br>
+        ● 파랑 = 포지션(기술) · ● 초록/주황 = 완료/진행중 프로젝트 · ● 회색 = 선수<br>선택한 선수는 주황색 테두리로 표시됩니다.</p></div></div></div>`;
+
+  sim?.stop();
+  const canvas = el.querySelector('#cy'), dpr = devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;  // ponytail: 리사이즈 대응 안 함, 필요하면 ResizeObserver
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const nodes = [
+    ...POSITIONS.map(p => ({ id: 'pos:' + p, label: p, type: 'pos' })),
+    ...PROJECTS.map(p => ({ id: p.id, label: p.name, type: 'proj', status: p.status })),
+    ...PLAYERS.map(p => ({ id: p.id, label: p.name, type: 'player' })),
+  ];
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const links = PLAYERS.flatMap(p => [{ source: byId[p.id], target: byId['pos:' + p.pos] },
+    ...p.projects.map(x => ({ source: byId[p.id], target: byId[x.project] }))]);
+  const adj = Object.fromEntries(nodes.map(n => [n.id, []]));
+  links.forEach(l => { adj[l.source.id].push(l.target); adj[l.target.id].push(l.source); });
+  G = { ctx: canvas.getContext('2d'), w, h, dpr, nodes, links, adj, active: [] };
+
+  sim = d3.forceSimulation(nodes)
+    .force('charge', d3.forceManyBody())
+    .force('x', d3.forceX(0).strength(.03)).force('y', d3.forceY(0).strength(.03))
+    .force('collide', d3.forceCollide())
+    .force('link', d3.forceLink([]))
+    .force('radial', d3.forceRadial(Math.min(w, h) / 2 - 20))
+    .force('spin', () => {
+      const c = Math.cos(SPIN), s = Math.sin(SPIN);
+      for (const n of nodes) {
+        if (n === G.drag) continue;
+        if (n.fx != null) [n.fx, n.fy] = [n.fx * c - n.fy * s, n.fx * s + n.fy * c];
+        else [n.x, n.y] = [n.x * c - n.y * s, n.x * s + n.y * c];
+      }
+    })
+    .alphaTarget(.02)  // 계속 미세하게 떨리는 철가루 느낌
+    .on('tick', draw);
+
+  // 클릭 = 상세 패널, 드래그 = 노드 끌기
+  let drag = null, moved = false;
+  const at = e => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left - w / 2, e.clientY - r.top - h / 2]; };
+  canvas.onpointerdown = e => {
+    const [x, y] = at(e);
+    drag = G.drag = hit(x, y);
+    moved = false;
+    if (drag) canvas.setPointerCapture(e.pointerId);
+  };
+  const hit = (x, y) => nodes.filter(n => !n.hidden).reduce((b, n) => {
+    const d = Math.hypot(n.x - x, n.y - y) - n.r;
+    return d < 6 && (!b || d < b.d) ? { n, d } : b;
+  }, null)?.n;
+  canvas.onpointermove = e => {
+    const [x, y] = at(e);
+    if (!drag) { G.hover = hit(x, y); return; }
+    moved = true; drag.fx = x; drag.fy = y; sim.alpha(.3).restart();
+  };
+  canvas.onpointerup = () => {
+    if (!drag) return;
+    if (!moved) showNode(drag);
+    if (drag.level) { drag.fx = drag.fy = null; }  // 자석(level 0)은 놓은 자리에 고정
+    drag = G.drag = null;
+  };
+
+  const q = el.querySelector('#q');
+  q.oninput = () => magnetize(q.value);
+  magnetize(q.value);
+  paint();
+}
+
+// level 0 = 자석, 1 = 자석에 붙은 노드, 2 = 그 노드의 다른 연결(기술 링크), 3 = 나머지 철가루
+function magnetize(query) {
+  const { nodes, links, adj, w, h } = G;
+  const terms = query.split(/[\s,]+/).filter(Boolean);
+  nodes.forEach(n => { n.hidden = n.type === 'player' && !S.showBusy && P[n.id].busy; n.level = 3; });
+  const mags = nodes.filter(n => n.type !== 'player' && terms.some(t => n.label.includes(t)));
+  mags.forEach((n, i) => {
+    n.level = 0;
+    const a = 2 * Math.PI * i / mags.length, R = mags.length > 1 ? Math.min(w, h) / 4 : 0;
+    n.fx = R * Math.cos(a); n.fy = R * Math.sin(a);
+  });
+  nodes.forEach(n => { if (n.level) n.fx = n.fy = null; });
+  for (const lv of [1, 2]) nodes.filter(n => n.level === lv - 1).forEach(n =>
+    adj[n.id].forEach(m => { if (!m.hidden && m.level > lv) m.level = lv; }));
+  nodes.forEach(n => n.r = n.hidden ? 0 : [18, n.type === 'player' ? 5 + Math.sqrt(P[n.id].salary) / 60 : 9, 7, n.type === 'player' ? 2.2 : 3.5][n.level]);
+  G.manyLabels = nodes.filter(n => n.level === 1).length > 30;
+  G.active = links.filter(l => !l.source.hidden && !l.target.hidden && l.source.level < 3 && l.target.level < 3
+    && Math.abs(l.source.level - l.target.level) === 1);
+
+  const idle = !mags.length;
+  sim.force('link').links(G.active).distance(l => Math.min(l.source.level, l.target.level) ? 70 : 55)
+    .strength(l => Math.min(l.source.level, l.target.level) ? .08 : .7);
+  sim.force('charge').strength(n => idle ? -3 : n.level < 3 ? -60 : -2);
+  sim.force('collide').radius(n => n.r + 1.5);
+  sim.force('radial').strength(n => !idle && n.level === 3 ? .1 : 0);
+  sim.alpha(.8).restart();
+  document.getElementById('hits').textContent = idle ? (terms.length ? '매칭 없음' : '')
+    : `구심점 ${mags.map(m => m.label).join(', ')} · 연결 선수 ${nodes.filter(n => n.type === 'player' && n.level === 1).length}명`;
+}
+
+function draw() {
+  const { ctx, w, h, dpr, nodes, active } = G;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.translate(w / 2, h / 2);
+  ctx.lineWidth = 1;
+  for (const l of active) {
+    ctx.strokeStyle = Math.min(l.source.level, l.target.level) ? 'rgba(148,163,184,.35)' : 'rgba(47,111,237,.35)';
+    ctx.beginPath(); ctx.moveTo(l.source.x, l.source.y); ctx.lineTo(l.target.x, l.target.y); ctx.stroke();
+  }
+  // 철가루를 먼저, 자석을 마지막에 그려 위로 오게
+  for (const n of [...nodes].sort((a, b) => b.level - a.level)) {
+    if (n.hidden) continue;
+    const p = n.type === 'player' && P[n.id];
+    ctx.globalAlpha = n.level === 3 ? .45 : 1;
+    ctx.fillStyle = n.type === 'pos' ? '#2f6fed' : n.type === 'proj' ? (n.status === '진행중' ? '#d97706' : '#16a34a')
+      : n.level === 3 ? '#6b7280' : p.busy ? '#f59e0b' : '#334155';
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI); ctx.fill();
+    if (p && S.selected.includes(n.id)) { ctx.strokeStyle = '#f97316'; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 1; }
+    // 라벨: 자석은 항상, 나머지는 적을 때만 · 호버/선택 시
+    if (n.level === 0 || n === G.hover || (p && S.selected.includes(n.id)) || (n.level === 1 && !G.manyLabels)) {
+      ctx.globalAlpha = 1;
+      const inside = n.level === 0 && n.label.length <= 4;  // 긴 프로젝트명은 원 아래에
+      ctx.fillStyle = inside ? '#fff' : '#111827';
+      ctx.font = n.level ? '11px sans-serif' : 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x, inside ? n.y + 4 : n.y + n.r + 12);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// 우측 상단: 팀 구성 목록 (포지션별 슬롯 + 예산)
+function paint() {
+  const need = S.project.positions, t = total(), left = S.project.budget - t;
+  document.getElementById('team').innerHTML = `
+    <div class="row" style="justify-content:space-between"><b>${S.project.name}</b>
+      <span class="muted">${S.selected.length}/${Object.values(need).reduce((a, b) => a + b, 0)}명</span></div>
+    <div style="margin:8px 0">${Object.entries(need).map(([pos, n]) => {
+      const picked = S.selected.filter(id => P[id].pos === pos);
+      return [...picked.map(id => `<div class="slot"><span class="tag">${pos}</span>
+          <span class="who" onclick="showNode({type:'player',id:'${id}'})">${P[id].name}</span>
+          <span class="muted">${man(P[id].salary)}</span><button class="x" onclick="toggle('${id}')" aria-label="제외">✕</button></div>`),
+        ...Array(Math.max(0, n - picked.length)).fill(`<div class="slot"><span class="tag">${pos}</span><span class="who muted">비어 있음</span></div>`)].join('');
+    }).join('') || '<p class="muted">1페이지에서 포지션을 선택하세요</p>'}</div>
+    <div class="row" style="font-size:13px"><span>연봉 합계 <b>${man(t)}</b></span>
+      <span>잔액 <b class="${left < 0 ? 'over' : ''}">${man(left)}</b>${left < 0 ? ' <span class="over">초과</span>' : ''}</span></div>
+    <label style="display:flex;gap:6px;align-items:center;color:var(--ink)">
+      <input type="checkbox" style="width:auto" ${S.showBusy ? 'checked' : ''} onchange="S.showBusy=this.checked;save();magnetize(document.getElementById('q').value)"> 참여중 인재 보기</label>
+    <div class="row" style="margin-top:8px"><button class="ghost" onclick="autoPick()">자동 추천</button>
+      <button class="ghost" onclick="S.selected=[];save();paint()">초기화</button>
+      <button style="margin-left:auto" onclick="location.hash='#3'" ${S.selected.length ? '' : 'disabled'}>계획서로 →</button></div>`;
+}
+
+function toggle(id) {
+  S.selected = S.selected.includes(id) ? S.selected.filter(x => x !== id) : [...S.selected, id];
+  save(); paint(); showNode(P[id] && { type: 'player', id });
+}
+
+function showNode(d) {
+  const side = document.getElementById('side');
+  if (d.type === 'pos') {
+    const list = PLAYERS.filter(p => p.pos === d.label && (S.showBusy || !p.busy)).sort((a, b) => b.war - a.war);
+    side.innerHTML = `<h3 style="margin-top:0">${d.label} <span class="muted">${list.length}명</span></h3>
+      <table><tr><th>선수</th><th class="n">WAR</th><th class="n">연봉</th></tr>${list.map(p =>
+        `<tr style="cursor:pointer" onclick="showNode({type:'player',id:'${p.id}'})"><td>${p.name}${p.busy ? ' <span class="tag busy">참여중</span>' : ''}</td>
+        <td class="n">${p.war}</td><td class="n">${man(p.salary)}</td></tr>`).join('')}</table>`;
+  } else if (d.type === 'proj') {
+    const pj = PJ[d.id];
+    side.innerHTML = `<h3 style="margin-top:0">${pj.name}</h3><span class="tag ${pj.status === '완료' ? 'done' : 'busy'}">${pj.status}</span>
+      <p class="muted">예산 ${man(pj.budget)} · 포지션 ${pj.positions.join(', ')}</p>
+      <table><tr><th>선수</th><th>포지션</th><th class="n">평가</th></tr>${pj.members.map(id => {
+        const x = P[id].projects.find(q => q.project === pj.id);
+        return `<tr style="cursor:pointer" onclick="showNode({type:'player',id:'${id}'})"><td>${P[id].name}</td><td>${x.pos}</td><td class="n">${x.rating ? '★'.repeat(x.rating) : '-'}</td></tr>`;
+      }).join('')}</table>`;
+  } else {
+    const p = P[d.id], picked = S.selected.includes(p.id);
+    side.innerHTML = `<h3 style="margin:0">${p.name} ${p.busy ? '<span class="tag busy">참여중</span>' : ''}</h3>
+      <p class="muted">${p.pos} · ${p.hand} · ${p.age}세</p>
+      <div class="row"><div><div class="muted">2018 연봉 (내부단가)</div><b style="font-size:20px">${man(p.salary)}</b></div>
+        <div><div class="muted">WAR</div><b style="font-size:20px">${p.war}</b></div></div>
+      <p>타율 ${p.avg} · OBP ${p.obp} · SLG ${p.slg} · OPS ${p.ops}<br>홈런 ${p.hr} · 타점 ${p.rbi} · 도루 ${p.sb}</p>
+      <button onclick="toggle('${p.id}')" ${!S.project.positions[p.pos] ? 'disabled title="프로젝트에 필요 없는 포지션"' : ''}>${picked ? '선택 해제' : '이 선수 선택'}</button>
+      <h4>연도별 기록</h4>
+      <table><tr><th>연도</th><th class="n">G</th><th class="n">타율</th><th class="n">HR</th><th class="n">OPS</th><th class="n">WAR</th><th class="n">연봉</th></tr>
+        ${p.history.map(h => `<tr><td>${h.year}</td><td class="n">${h.g}</td><td class="n">${h.avg}</td><td class="n">${h.hr}</td><td class="n">${h.ops}</td><td class="n">${h.war}</td><td class="n">${h.salary.toLocaleString()}</td></tr>`).join('')}</table>
+      <h4>프로젝트 이력 · 평가</h4>
+      ${p.projects.length ? `<table>${p.projects.map(x => `<tr><td>${PJ[x.project].name}</td><td>${x.pos}</td>
+        <td>${x.rating ? '★'.repeat(x.rating) + `<div class="muted">${x.comment}</div>` : '<span class="tag busy">진행중</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">이력 없음</p>'}`;
+  }
+}
+
+// ponytail: 그리디 추천 (WAR 우선, 남은 슬롯 최소 연봉 남겨두기). 최적해 필요하면 knapsack으로
+function autoPick() {
+  const need = Object.entries(S.project.positions);
+  const pool = PLAYERS.filter(p => S.showBusy || !p.busy);
+  const minSal = Math.min(...pool.map(p => p.salary));
+  let left = S.project.budget, slots = need.reduce((s, [, n]) => s + n, 0);
+  S.selected = [];
+  for (const [pos, n] of need) for (let i = 0; i < n; i++) {
+    const best = pool.filter(p => p.pos === pos && !S.selected.includes(p.id) && p.salary <= left - (slots - 1) * minSal)
+                     .sort((a, b) => b.war - a.war)[0];
+    slots--;
+    if (best) { S.selected.push(best.id); left -= best.salary; }
+  }
+  save(); paint();
+}
+
+// ---------- 3. 계획서 ----------
+function page3(el) {
+  const pj = S.project, t = total();
+  const rows = S.selected.map(id => P[id]).sort((a, b) => a.pos.localeCompare(b.pos));
+  el.innerHTML = `<div class="card">
+    <div class="row"><h2 style="margin:0">${pj.name}</h2><span class="tag ${S.status === '작성중' ? '' : 'busy'}">${S.status}</span></div>
+    <p>${pj.desc}</p>
+    <div class="row"><div><div class="muted">예산</div><b>${man(pj.budget)}</b></div>
+      <div><div class="muted">인건비 합계</div><b>${man(t)}</b></div>
+      <div><div class="muted">잔액</div><b class="${pj.budget < t ? 'over' : ''}">${man(pj.budget - t)}</b></div>
+      <div><div class="muted">필요 포지션</div>${Object.entries(pj.positions).map(([k, v]) => `<span class="tag">${k} ×${v}</span>`).join(' ')}</div></div>
+  </div>
+  <div class="card"><h3 style="margin-top:0">배치 인재 (${rows.length}명)</h3>
+    <table><tr><th>포지션</th><th>선수</th><th>투타</th><th class="n">나이</th><th class="n">OPS</th><th class="n">WAR</th><th class="n">연봉</th><th>평균 평가</th></tr>
+    ${rows.map(p => {
+      const r = p.projects.filter(x => x.rating);
+      return `<tr><td>${p.pos}</td><td>${p.name}</td><td>${p.hand}</td><td class="n">${p.age}</td><td class="n">${p.ops}</td><td class="n">${p.war}</td><td class="n">${man(p.salary)}</td>
+        <td>${r.length ? (r.reduce((s, x) => s + x.rating, 0) / r.length).toFixed(1) + ` <span class="muted">(${r.length}건)</span>` : '-'}</td></tr>`;
+    }).join('')}</table>
+    <p class="row noprint" style="justify-content:flex-end;margin-bottom:0">
+      <button class="ghost" onclick="location.hash='#2'">← 수정</button>
+      <button class="ghost" onclick="print()">계획서 저장 (PDF)</button>
+      <button id="submit" ${S.status !== '작성중' || !rows.length ? 'disabled' : ''}>${S.status === '작성중' ? '승인 신청' : S.status}</button></p>
+  </div>`;
+  el.querySelector('#submit').onclick = () => { S.status = '승인대기'; save(); route(); };
+}
+
+// ---------- 4. 관리자 ----------
+function page4(el) {
+  const mine = S.status !== '작성중' ? [{ id: 'MINE', name: S.project.name, status: S.status, members: S.selected }] : [];
+  const list = [...mine, ...PROJECTS.filter(p => p.status === '진행중').map(p => ({ ...p, status: S.closed[p.id] ? '마감' : p.status }))];
+  el.innerHTML = `<div class="card"><h2 style="margin-top:0">프로젝트 관리</h2>
+    <table><tr><th>프로젝트</th><th class="n">인원</th><th>상태</th><th></th></tr>
+    ${list.map(p => `<tr><td>${p.name}</td><td class="n">${p.members.length}</td>
+      <td><span class="tag ${p.status === '마감' ? 'done' : 'busy'}">${p.status}</span></td>
+      <td>${p.status === '승인대기' ? `<button onclick="approve()">승인</button>` : p.status === '진행중' ? `<button class="ghost" onclick="review('${p.id}')">마감 · 평가</button>` : ''}</td></tr>`).join('')}
+    </table></div><div id="rv"></div>`;
+}
+function approve() { S.status = '진행중'; save(); route(); }
+
+function review(pid) {
+  const members = pid === 'MINE' ? S.selected : PJ[pid].members;
+  const name = pid === 'MINE' ? S.project.name : PJ[pid].name;
+  const rv = S.reviews[pid] ||= Object.fromEntries(members.map(id => [id, { rating: 3, comment: '' }]));
+  const box = document.getElementById('rv');
+  const draw = () => box.innerHTML = `<div class="card"><h3 style="margin-top:0">${name} — 인재 평가</h3>
+    <table><tr><th>선수</th><th>포지션</th><th>평가</th><th>코멘트</th></tr>
+    ${members.map(id => `<tr><td>${P[id].name}</td><td>${P[id].pos}</td>
+      <td class="stars">${[1, 2, 3, 4, 5].map(n => `<button class="${n <= rv[id].rating ? 'on' : ''}" data-id="${id}" data-r="${n}" aria-label="${n}점">★</button>`).join('')}</td>
+      <td><input data-c="${id}" value="${rv[id].comment}" placeholder="한 줄 평가"></td></tr>`).join('')}</table>
+    <p class="row" style="justify-content:flex-end"><button id="close">마감 승인 → 그래프DB 저장</button></p><div id="cypher"></div></div>`;
+  draw();
+  box.onclick = e => {
+    if (e.target.dataset.r) { rv[e.target.dataset.id].rating = +e.target.dataset.r; save(); draw(); }
+    if (e.target.id === 'close') {
+      if (pid === 'MINE') S.status = '마감'; else S.closed[pid] = true;
+      save();
+      const q = members.map(id => `MERGE (p:Person {id:'${id}', name:'${P[id].name}'})
+MERGE (s:Skill {name:'${P[id].pos}'}) MERGE (p)-[:HAS_SKILL]->(s)
+MERGE (p)-[:PARTICIPATED {rating:${rv[id].rating}, comment:'${rv[id].comment.replace(/'/g, "\\'")}'}]->(pr)`).join('\n');
+      page4(document.getElementById('app'));
+      document.getElementById('rv').innerHTML = `<div class="card"><h3 style="margin-top:0">✅ 마감 완료 — 그래프DB 저장 (목업)</h3>
+        <pre>MERGE (pr:Project {name:'${name}', status:'마감'})\n${q.replace(/</g, '&lt;')}</pre></div>`;
+    }
+  };
+  box.oninput = e => { if (e.target.dataset.c) { rv[e.target.dataset.c].comment = e.target.value; save(); } };
+}
+
+route();
+</script>
+</body>
+</html>
