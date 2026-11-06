@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PM 인재 매니징</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1.80.1/dist/3d-force-graph.min.js"></script>
 <script src="profiles.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
@@ -16,11 +16,10 @@
           --acc:var(--n-skill); --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --vio:var(--n-company); --teal:var(--n-job); }
   * { box-sizing:border-box; }
   body { margin:0; font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif; color:var(--ink); min-height:100vh;
-         background:linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px) var(--paper);
-         background-size:32px 32px; }
+         background:#000; }
   header { position:fixed; top:0; left:0; right:0; z-index:10; display:flex; align-items:center; gap:24px; padding:32px 32px 0 40px; pointer-events:none; }
   header > * { pointer-events:auto; }
-  .brand { font:600 25px/1.4 Inter,sans-serif; color:var(--ink); text-decoration:none; margin-right:auto; }
+  .brand { font:600 25px/1.4 Inter,sans-serif; color:#f4f4f2; text-decoration:none; margin-right:auto; }
   .cmdbar, .ctrls { display:flex; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:99px; }
   .cmdbar { gap:8px; padding:8px; box-shadow:var(--shadow); }
   /* 돋보기 → 알약이 왼쪽으로 늘어나며 검색창이 열림 */
@@ -67,7 +66,18 @@
   .tag.gray { background:#f3f4f6; color:var(--mute); }
   .tag.vio { background:#ede9fe; color:var(--vio); }
   /* SPA: 그래프 캔버스는 항상 배경, 탭은 오른쪽 패널(#app) 내용만 바꿈 */
-  #cy { position:fixed; inset:0; width:100%; height:100%; cursor:pointer; touch-action:none; }
+  /* 검은 배경 위에 투명한 3D 그래프(#cy), 그 위에 라벨 · 선택 표시 오버레이(#marks) */
+  #cy { position:fixed; left:0; top:0; height:100%; touch-action:none; }
+  #marks { position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:1; }
+  .mk { position:absolute; left:0; top:0; will-change:transform; }
+  .mk i { position:absolute; display:none; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:#fff; box-shadow:0 0 6px rgba(255,255,255,.8); }
+  .mk.dot i { display:block; }
+  .mk.sel::before { content:""; position:absolute; width:calc(var(--gap) * 2); height:calc(var(--gap) * 2); left:calc(var(--gap) * -1); top:calc(var(--gap) * -1);
+                    border:2px solid #f97316; border-radius:50%; box-sizing:border-box; }
+  .mk span { position:absolute; left:0; top:var(--gap); transform:translateX(-50%); white-space:nowrap; font-size:11px; color:rgba(235,238,245,.9);
+             text-shadow:0 0 4px #000, 0 0 8px #000; }
+  .mk.mag span { font-size:13px; font-weight:700; color:#fff; }
+  .scene-tooltip { font:12px "Noto Sans KR",sans-serif !important; }
   /* 오른쪽 컨테이너는 하나: 테두리는 고정, 안쪽만 스크롤. 페이지 안의 .card는 구분선으로만 나뉜 섹션 */
   #app { position:fixed; z-index:5; top:120px; right:32px; bottom:88px; width:var(--pw, 400px); padding:20px; overflow:auto; overscroll-behavior:contain;
          background:var(--card); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); transition:width .35s cubic-bezier(.2,.8,.2,1); }
@@ -84,7 +94,7 @@
   .seg { position:sticky; top:-20px; z-index:2; display:flex; gap:4px; margin:-20px -20px 16px; padding:16px 20px 12px; background:var(--card); }
   .seg a { padding:6px 14px; border-radius:99px; color:var(--mute); text-decoration:none; font-size:13px; background:var(--fill); }
   .seg a.on { background:var(--ink); color:#fff; }
-  .legend { position:fixed; z-index:5; left:40px; bottom:44px; display:flex; gap:16px; flex-wrap:wrap; font-size:10px; line-height:1.5; color:var(--mute); }
+  .legend { position:fixed; z-index:5; left:40px; bottom:44px; display:flex; gap:16px; flex-wrap:wrap; font-size:10px; line-height:1.5; color:#a9adb5; }
   .legend span { display:flex; align-items:center; gap:6px; }
   .legend i { width:8px; height:8px; border-radius:50%; }
   .ctrls { position:fixed; z-index:5; right:40px; bottom:24px; gap:16px; padding:12px; color:var(--ink); }
@@ -109,7 +119,7 @@
     .cmdbar.open input { width:calc(100vw - 260px); } .legend { display:none; }
     #app { top:auto; left:16px; right:16px; bottom:76px; width:auto; height:50vh; } .ctrls { right:16px; bottom:16px; }
   }
-  @media print { body { background:#fff; } header, .noprint, #cy, .legend { display:none !important; }
+  @media print { body { background:#fff; } header, .noprint, #cy, #marks, .legend { display:none !important; }
     #app { position:static; width:auto; overflow:visible; border:0; box-shadow:none; } .card { border:0; box-shadow:none; } }
 </style>
 </head>
@@ -123,11 +133,12 @@
     <button class="act" id="find" title="인재 그래프 검색" aria-label="검색"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></button>
   </div>
 </header>
-<canvas id="cy"></canvas>
+<div id="cy"></div>
+<div id="marks"></div>
 <div class="legend" id="legend"></div>
 <div class="ctrls noprint">
   <button id="spin" aria-label="회전 일시정지"><svg viewBox="0 0 24 24"></svg></button>
-  <b id="zoom" title="휠로 확대/축소">100%</b>
+  <b id="zoom" title="휠로 확대/축소, 드래그로 회전">100%</b>
   <button id="more" aria-label="패널 숨기기/보기" title="패널 숨기기/보기"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
 </div>
 <main id="app"></main>
@@ -174,12 +185,9 @@ function route() {
   PAGES[k][1](app);
   if (k === '1' || k === '2')
     app.insertAdjacentHTML('afterbegin', `<nav class="seg noprint">${['1', '2'].map(t => `<a href="#${t}" class="${t === k ? 'on' : ''}">${t}. ${PAGES[t][0]}</a>`).join('')}</nav>`);
-  G.tx = center();  // 패널 폭이 바뀌면 그래프 중심이 부드럽게 따라감
+  layout();  // 패널 폭에 맞춰 그래프 영역 조정
 }
 const PANEL_W = { 1: 460, 2: 400, 3: 680, 4: 560 };
-// 오른쪽 패널을 뺀 영역의 가운데 (Figma에서도 궤도가 왼쪽에 치우쳐 있음)
-const center = () => document.body.classList.contains('nopanel') || G.w <= 900 ? G.w / 2
-  : (G.w - 32 - parseFloat(getComputedStyle(document.getElementById('app')).getPropertyValue('--pw'))) / 2;
 // 노드 상세는 2번 패널에 있으므로, 다른 탭에서 노드를 누르면 2번으로 전환 (hashchange 없이 즉시)
 const goto = k => { if (location.hash !== '#' + k) { history.pushState(null, '', '#' + k); route(); } };
 addEventListener('hashchange', route);
@@ -224,23 +232,27 @@ function page1(el) {
   el.querySelector('#next').onclick = () => location.hash = '#2';
 }
 
-// ---------- 2. 인재 그래프 ----------
-// 철가루(작은 점) + 자석(검색 매칭 노드) 물리 그래프. d3-force + canvas
-let sim, G;
-const SPIN = 2 * Math.PI / (180 * 60);  // rad/tick, Figma Orbit과 같은 180초에 한 바퀴 (60fps 기준)
+// ---------- 2. 인재 그래프 (3D) ----------
+// 철가루(작은 점) + 자석(검색 매칭 노드) 물리 그래프. 3d-force-graph (three.js + d3-force-3d)
+// 회전은 노드를 돌리지 않고 카메라가 공전 (OrbitControls autoRotate). 라벨 · 선택 표시는 HTML 오버레이
+let G;
 const css = getComputedStyle(document.documentElement), tok = k => css.getPropertyValue('--n-' + k).trim();
-const COLOR = { job: tok('job'), tech: tok('skill'), client: tok('company'), done: tok('project'), active: tok('project-active'), person: tok('person'), busy: tok('person-active') };
+// 구성원 색(#3f3f3f)은 검은 배경에서 안 보여서 흰색으로
+const COLOR = { job: tok('job'), tech: tok('skill'), client: tok('company'), done: tok('project'), active: tok('project-active'), person: '#ffffff', busy: tok('person-active') };
 const ICON = { pause: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>', play: '<path d="M5 3l14 9-14 9V3z"/>' };
+// 흐린 노드(Figma Muted): 반투명 대신 배경색과 섞은 불투명 색. 반투명이면 three.js가 매 프레임 수천 개를 정렬해야 해서 느림
+const mute = (hex, a = .45, bg = [0, 0, 0]) => `rgb(${[1, 3, 5].map((i, k) => Math.round(parseInt(hex.slice(i, i + 2), 16) * a + bg[k] * (1 - a))).join(',')})`;
+// ?fake=4000 → 성능 측정용 가짜 노드 추가 (FPS는 window.FPS에 1초 단위로 기록)
+const PARAMS = new URLSearchParams(location.search), FAKE = +PARAMS.get('fake') || 0;
+const ORBIT_SEC = 180;  // Figma Orbit과 같은 180초에 한 바퀴
+
 // 그래프는 앱 시작 시 한 번만 만들고 모든 탭의 배경으로 계속 돈다
 function initGraph() {
   const dot = (c, t) => `<span><i style="background:${COLOR[c]}"></i>${t}</span>`;
   document.getElementById('legend').innerHTML = dot('job', '직무') + dot('tech', '기술') + dot('client', '고객사') + dot('done', '완료 프로젝트')
     + dot('active', '진행중 프로젝트') + dot('person', '구성원') + dot('busy', '참여중 구성원');
-  const el = document;
-  el.querySelector('#spin svg').innerHTML = ICON.pause;
-  const canvas = el.querySelector('#cy'), dpr = devicePixelRatio || 1;
-  const w = canvas.clientWidth, h = canvas.clientHeight;  // ponytail: 리사이즈 대응 안 함, 필요하면 ResizeObserver
-  canvas.width = w * dpr; canvas.height = h * dpr;
+  document.querySelector('#spin svg').innerHTML = ICON.pause;
+
   const usedTech = new Set(PEOPLE.flatMap(p => p.techs.map(t => t.name)));
   const nodes = [
     ...JOBS.map(j => ({ id: 'job:' + j, label: j, type: 'job', alias: [] })),
@@ -249,71 +261,124 @@ function initGraph() {
     ...PROJECTS.map(p => ({ id: p.id, label: p.name, type: 'proj', status: p.status, alias: PMS_ALIAS[p.id] })),
     ...PEOPLE.map(p => ({ id: p.id, label: p.id, type: 'person', alias: [] })),
   ];
+  const real = nodes.length;
+  const FT = ['job', 'tech', 'client', 'proj'];
+  // 실제 데이터처럼 구성원이 대부분: 가짜 노드 70%는 구성원(10%는 참여중), 30%는 직무 · 기술 · 고객사 · 프로젝트
+  for (let i = 0; i < FAKE; i++) {
+    const id = 'fake:' + i, type = i % 10 < 7 ? 'person' : FT[i % 4];
+    if (type === 'person') P[id] = { busy: i % 10 === 0, rate: 600 + i % 7 * 100 };
+    nodes.push({ id, label: 'F' + i, type, status: i % 8 === 3 ? '진행중' : '완료', alias: [], fake: true });
+  }
   const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
   const links = [
     ...PEOPLE.flatMap(p => [['job:' + p.job, p.id], ...p.techs.map(t => ['tech:' + t.name, p.id]), ...p.projects.map(x => [x.std, p.id])]),
     ...PROJECTS.map(p => ['client:' + p.client, p.id]),
-  ].map(([a, b]) => ({ source: byId[a], target: byId[b] }));
+    ...nodes.slice(real).flatMap(n => [0, 1].map(() => [n.id, nodes[Math.floor(Math.random() * nodes.length)].id])),
+  ].filter(([a, b]) => a !== b).map(([a, b]) => ({ source: byId[a], target: byId[b] }));
   const adj = Object.fromEntries(nodes.map(n => [n.id, []]));
   links.forEach(l => { adj[l.source.id].push(l.target); adj[l.target.id].push(l.source); });
-  G = { ctx: canvas.getContext('2d'), w, h, dpr, nodes, links, adj, active: [], cx: w / 2, tx: w / 2, k: 1, paused: false };
 
-  sim = d3.forceSimulation(nodes)
-    .force('charge', d3.forceManyBody())
-    .force('x', d3.forceX(0).strength(.03)).force('y', d3.forceY(0).strength(.03))
-    .force('collide', d3.forceCollide())
-    .force('link', d3.forceLink([]))
-    .force('radial', d3.forceRadial(Math.min(w, h) / 2 - 20))
-    .force('spin', () => {
-      if (G.paused) return;
-      const c = Math.cos(SPIN), s = Math.sin(SPIN);
-      for (const n of nodes) {
-        if (n === G.drag) continue;
-        if (n.fx != null) [n.fx, n.fy] = [n.fx * c - n.fy * s, n.fx * s + n.fy * c];
-        else [n.x, n.y] = [n.x * c - n.y * s, n.x * s + n.y * c];
-      }
+  const el = document.getElementById('cy');
+  const fg = ForceGraph3D({ controlType: 'orbit', rendererConfig: { alpha: true, antialias: true, powerPreference: 'high-performance' } })(el)
+    .backgroundColor('#000')
+    .showNavInfo(false)
+    .nodeRelSize(1).nodeVal(n => n.r ** 3)  // nodeVal은 부피 → 반지름 = n.r
+    .nodeResolution(16)  // 구를 둘레 16조각으로 (6이면 육각형처럼 보임)
+    .nodeOpacity(1)
+    .nodeVisibility(n => !n.hidden)
+    .nodeColor(n => {
+      const p = n.type === 'person' && P[n.id];
+      const c = n.type === 'proj' ? (n.status === '진행중' ? COLOR.active : COLOR.done) : p ? (p.busy ? COLOR.busy : COLOR.person) : COLOR[n.type];
+      return n.level === 3 ? mute(c, p ? .6 : .45) : c;  // 구성원은 흐려져도 밝게
     })
-    .alphaTarget(.02)  // 계속 미세하게 떨리는 철가루 느낌
-    .on('tick', draw);
+    .nodeLabel(n => n.level === 3 ? esc(n.label) : '')  // 라벨 없는 철가루만 호버 툴팁
+    .linkColor(l => Math.min(l.source.level, l.target.level) ? 'rgba(190,200,225,.35)' : 'rgba(120,165,255,.8)')
+    .linkOpacity(.5)
+    .onNodeClick(n => { if (!n.fake) showNode(n.id); })
+    .onNodeHover(n => { G.hover = n; el.style.cursor = n ? 'pointer' : ''; })
+    .onNodeDragEnd(n => { if (!n.level) { n.fx = n.x; n.fy = n.y; n.fz = n.z; } })  // 자석(level 0)은 놓은 자리에 고정
+    .graphData({ nodes, links: [] });
 
-  // 클릭 = 상세 패널, 드래그 = 노드 끌기
-  let drag = null, moved = false;
-  const at = e => { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left - G.cx) / G.k, (e.clientY - r.top - h / 2) / G.k]; };
-  canvas.onwheel = e => {
-    e.preventDefault();
-    G.k = Math.min(4, Math.max(.3, G.k * Math.exp(-e.deltaY * .001)));
-    el.querySelector('#zoom').textContent = Math.round(G.k * 100) + '%';
-    draw();
+  // 물리: 전체를 가운데로 당기는 중력 + 검색 중엔 나머지 철가루를 바깥 껍질로 밀어냄
+  const shape = () => {
+    let ns;
+    const f = a => {
+      for (const n of ns) {
+        const d = Math.hypot(n.x, n.y, n.z) || 1;
+        let k = -.03;
+        if (!G.idle && n.level === 3) k += (G.shell - d) / d * .1;
+        n.vx += n.x * k * a; n.vy += n.y * k * a; n.vz += n.z * k * a;
+      }
+    };
+    f.initialize = x => ns = x;
+    return f;
   };
-  el.querySelector('#spin').onclick = e => {
-    G.paused = !G.paused;
-    e.currentTarget.querySelector('svg').innerHTML = G.paused ? ICON.play : ICON.pause;
-    e.currentTarget.ariaLabel = G.paused ? '회전 재개' : '회전 일시정지';
-  };
-  el.querySelector('#more').onclick = () => { document.body.classList.toggle('nopanel'); G.tx = center(); };
-  const hit = (x, y) => nodes.filter(n => !n.hidden).reduce((b, n) => {
-    const d = Math.hypot(n.x - x, n.y - y) - n.r;
-    return d < 6 && (!b || d < b.d) ? { n, d } : b;
-  }, null)?.n;
-  canvas.onpointerdown = e => {
-    const [x, y] = at(e);
-    drag = G.drag = hit(x, y);
-    moved = false;
-    if (drag) canvas.setPointerCapture(e.pointerId);
-  };
-  canvas.onpointermove = e => {
-    const [x, y] = at(e);
-    if (!drag) { G.hover = hit(x, y); return; }
-    moved = true; drag.fx = x; drag.fy = y; sim.alpha(.3).restart();
-  };
-  canvas.onpointerup = () => {
-    if (!drag) return;
-    if (!moved) showNode(drag.id);
-    if (drag.level) { drag.fx = drag.fy = null; }  // 자석(level 0)은 놓은 자리에 고정
-    drag = G.drag = null;
-  };
+  fg.d3Force('shape', shape()).d3Force('center', null);
 
+  const controls = fg.controls();
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 60 / ORBIT_SEC;  // OrbitControls: 2.0 = 30초/바퀴
+  controls.enableDamping = true;
+
+  G = { fg, el, nodes, links, adj, active: [], idle: true, shell: 220, marks: new Map(), dist0: 0 };
   magnetize('');
+  fg.cameraPosition({ x: 0, y: 0, z: FAKE ? 1400 : 520 });
+  G.dist0 = FAKE ? 1400 : 520;
+
+  document.getElementById('spin').onclick = e => {
+    controls.autoRotate = !controls.autoRotate;
+    e.currentTarget.querySelector('svg').innerHTML = controls.autoRotate ? ICON.pause : ICON.play;
+    e.currentTarget.ariaLabel = controls.autoRotate ? '회전 일시정지' : '회전 재개';
+  };
+  document.getElementById('more').onclick = () => { document.body.classList.toggle('nopanel'); layout(); };
+  addEventListener('resize', layout);
+  requestAnimationFrame(overlay);
+  // 노드 빛남: UnrealBloomPass 후처리. 3d-force-graph에 번들된 three와 같은 r186 (jsdelivr +esm이 'three'를 같은 버전으로 연결)
+  Promise.all([import('https://cdn.jsdelivr.net/npm/three@0.186.0/+esm'),
+               import('https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/postprocessing/UnrealBloomPass.js/+esm')])
+    .then(([{ Vector2 }, { UnrealBloomPass }]) => fg.postProcessingComposer().addPass(new UnrealBloomPass(new Vector2(innerWidth, innerHeight), 1.1, .5, .05)))
+    .catch(() => {});  // 불러오기 실패해도 그래프는 빛 없이 동작
+}
+
+// 그래프 영역 = 화면에서 오른쪽 패널을 뺀 부분 (Figma에서도 궤도가 왼쪽에 치우쳐 있음)
+function layout() {
+  const pw = parseFloat(getComputedStyle(document.getElementById('app')).getPropertyValue('--pw'));
+  const w = document.body.classList.contains('nopanel') || innerWidth <= 900 ? innerWidth : innerWidth - pw - 32;
+  G.el.style.width = w + 'px';
+  G.fg.width(w).height(innerHeight);
+}
+
+// 매 프레임: 라벨 · 선택 표시를 노드 화면 좌표에 붙이고, 줌 % · FPS 갱신
+let fpsT = performance.now(), fpsN = 0;
+window.FPS = [];
+function overlay(now) {
+  requestAnimationFrame(overlay);
+  const { fg, nodes, marks } = G, cam = fg.camera(), box = document.getElementById('marks');
+  const dir = cam.getWorldDirection(new cam.position.constructor());
+  const want = new Set();
+  for (const n of nodes) {
+    if (n.hidden || n.x === undefined) continue;
+    const sel = n.type === 'person' && S.selected.includes(n.id), focus = n.id === G.focus;
+    const label = n.level === 0 || sel || (n.level === 1 && !G.manyLabels) || (n === G.hover && n.level < 3);
+    if (!label && !focus) continue;
+    // 카메라 뒤에 있는 노드는 표시 안 함
+    if ((n.x - cam.position.x) * dir.x + (n.y - cam.position.y) * dir.y + (n.z - cam.position.z) * dir.z < 0) continue;
+    want.add(n.id);
+    let m = marks.get(n.id);
+    if (!m) { m = document.createElement('div'); m.innerHTML = '<i></i><span></span>'; box.append(m); marks.set(n.id, m); }
+    m.className = 'mk' + (n.level === 0 ? ' mag' : '') + (sel ? ' sel' : '') + (focus || sel ? ' dot' : '');
+    m.lastChild.textContent = label ? n.label : '';
+    const s = fg.graph2ScreenCoords(n.x, n.y, n.z);
+    m.style.transform = `translate(${s.x}px,${s.y}px)`;
+    m.style.setProperty('--gap', Math.max(8, n.r * G.dist0 / cam.position.distanceTo(fg.controls().target) * 1.3) + 'px');
+  }
+  for (const [id, m] of marks) if (!want.has(id)) { m.remove(); marks.delete(id); }
+  document.getElementById('zoom').textContent = Math.round(G.dist0 / cam.position.distanceTo(fg.controls().target) * 100) + '%';
+  fpsN++;
+  if (now - fpsT >= 1000) {
+    const fps = Math.round(fpsN * 1000 / (now - fpsT));
+    window.FPS.push(fps); fpsN = 0; fpsT = now;
+  }
 }
 
 // ---------- 2. 인재 구성 (오른쪽 패널) ----------
@@ -327,11 +392,11 @@ const search = t => { q.value = t; bar.classList.add('open'); magnetize(t); };
 
 // level 0 = 자석, 1 = 자석에 붙은 노드, 2 = 그 노드의 다른 연결, 3 = 나머지 철가루
 function magnetize(query) {
-  const { nodes, links, adj, w, h } = G;
+  const { fg, nodes, links, adj } = G;
   const terms = query.split(/[\s,]+/).filter(Boolean).map(t => t.toLowerCase());
   nodes.forEach(n => { n.hidden = n.type === 'person' && !S.showBusy && P[n.id].busy; n.level = 3; n.via = null; });
   // 표준명 부분일치 또는 자유기술 표기 변형 일치(정규화) → 자석
-  const mags = nodes.filter(n => n.type !== 'person' && terms.some(t => {
+  const mags = nodes.filter(n => n.type !== 'person' && !n.fake && terms.some(t => {
     if (n.label.toLowerCase().includes(t)) return true;
     const a = n.alias.find(a => a.toLowerCase() === t || (t.length > 2 && a.toLowerCase().includes(t)));
     if (a) n.via = a;
@@ -339,62 +404,25 @@ function magnetize(query) {
   }));
   mags.forEach((n, i) => {
     n.level = 0;
-    const a = 2 * Math.PI * i / mags.length, R = mags.length > 1 ? Math.min(w, h) / 4 : 0;
-    n.fx = R * Math.cos(a); n.fy = R * Math.sin(a);
+    const a = 2 * Math.PI * i / mags.length, R = mags.length > 1 ? 90 : 0;
+    n.fx = R * Math.cos(a); n.fy = R * Math.sin(a); n.fz = 0;
   });
-  nodes.forEach(n => { if (n.level) n.fx = n.fy = null; });
+  nodes.forEach(n => { if (n.level) n.fx = n.fy = n.fz = undefined; });
   for (const lv of [1, 2]) nodes.filter(n => n.level === lv - 1).forEach(n =>
     adj[n.id].forEach(m => { if (!m.hidden && m.level > lv) m.level = lv; }));
-  nodes.forEach(n => n.r = n.hidden ? 0 : [18, n.type === 'person' ? 4 + P[n.id].rate / 250 : 9, 6, 4][n.level]);  // 철가루는 Figma처럼 같은 크기 점
+  nodes.forEach(n => n.r = n.hidden ? .01 : [14, n.type === 'person' ? 4 + P[n.id].rate / 300 : 7, 5, 3.2][n.level]);
   G.manyLabels = nodes.filter(n => n.level === 1).length > 30;
   G.active = links.filter(l => !l.source.hidden && !l.target.hidden && l.source.level < 3 && l.target.level < 3
     && Math.abs(l.source.level - l.target.level) === 1);
+  G.idle = !mags.length;
 
-  const idle = !mags.length;
-  sim.force('link').links(G.active).distance(l => Math.min(l.source.level, l.target.level) ? 70 : 60)
+  // 링크 데이터를 활성 링크로 교체 (노드 객체는 그대로라 위치 유지). 연결선은 검색했을 때만 보임
+  fg.graphData({ nodes, links: G.active });
+  fg.d3Force('link').distance(l => Math.min(l.source.level, l.target.level) ? 70 : 60)
     .strength(l => Math.min(l.source.level, l.target.level) ? .06 : .7);
-  sim.force('charge').strength(n => idle ? -4 : n.level < 3 ? -60 : -2);
-  sim.force('collide').radius(n => n.r + (idle ? 10 : 1.5));  // 대기 화면은 Figma처럼 성기게
-  sim.force('radial').strength(n => !idle && n.level === 3 ? .1 : 0);
-  sim.alpha(.8).restart();
-}
-
-function draw() {
-  const { ctx, w, h, dpr, nodes, active } = G;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-  G.cx += (G.tx - G.cx) * .12;
-  ctx.translate(G.cx, h / 2);
-  ctx.scale(G.k, G.k);
-  ctx.lineWidth = 1;
-  for (const l of active) {
-    ctx.strokeStyle = Math.min(l.source.level, l.target.level) ? 'rgba(148,163,184,.3)' : 'rgba(47,111,237,.35)';
-    ctx.beginPath(); ctx.moveTo(l.source.x, l.source.y); ctx.lineTo(l.target.x, l.target.y); ctx.stroke();
-  }
-  // 철가루를 먼저, 자석을 마지막에 그려 위로 오게
-  for (const n of [...nodes].sort((a, b) => b.level - a.level)) {
-    if (n.hidden) continue;
-    const p = n.type === 'person' && P[n.id];
-    ctx.globalAlpha = n.level === 3 ? .28 : 1;  // Figma Entity/Node Muted = 28%
-    ctx.fillStyle = n.type === 'proj' ? (n.status === '진행중' ? COLOR.active : COLOR.done)
-      : p ? (p.busy ? COLOR.busy : COLOR.person) : COLOR[n.type];
-    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI); ctx.fill();
-    if (p && S.selected.includes(n.id)) { ctx.strokeStyle = '#f97316'; ctx.lineWidth = 3; ctx.stroke(); ctx.lineWidth = 1; }
-    if (n.id === G.focus || (p && S.selected.includes(n.id))) {
-      ctx.globalAlpha = 1; ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(n.x, n.y, Math.max(1.5, n.r * .38), 0, 2 * Math.PI); ctx.fill();
-    }
-    // 라벨: 자석은 항상, 나머지는 적을 때만 · 호버/선택 시
-    if (n.level === 0 || n === G.hover || (p && S.selected.includes(n.id)) || (n.level === 1 && !G.manyLabels)) {
-      const inside = n.level === 0 && n.label.length <= 4;  // 긴 이름은 원 아래에
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = inside ? '#fff' : '#30332f';
-      ctx.font = n.level ? '11px "Noto Sans KR",sans-serif' : '700 12px "Noto Sans KR",sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(n.label, n.x, inside ? n.y + 4 : n.y + n.r + 12);
-    }
-  }
-  ctx.globalAlpha = 1;
+  fg.d3Force('charge').strength(n => G.idle ? -14 : n.level < 3 ? -60 : -3);
+  fg.nodeColor(fg.nodeColor()).nodeVal(fg.nodeVal()).nodeVisibility(fg.nodeVisibility());  // 색 · 크기 다시 계산
+  fg.d3ReheatSimulation();
 }
 
 // 우측 상단: 팀 구성 목록 (직무별 슬롯 + 예산)
