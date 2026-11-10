@@ -67,7 +67,7 @@
   .tag.vio { background:#ede9fe; color:var(--vio); }
   /* SPA: 그래프 캔버스는 항상 배경, 탭은 오른쪽 패널(#app) 내용만 바꿈 */
   /* 검은 배경 위에 투명한 3D 그래프(#cy), 그 위에 라벨 · 선택 표시 오버레이(#marks) */
-  #cy { position:fixed; left:0; top:0; height:100%; touch-action:none; }
+  #cy { position:fixed; left:0; top:0; width:100%; height:100%; touch-action:none; }
   #marks { position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:1; }
   .mk { position:absolute; left:0; top:0; will-change:transform; }
   .mk i { position:absolute; display:none; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:#fff; box-shadow:0 0 6px rgba(255,255,255,.8); }
@@ -321,7 +321,7 @@ function initGraph() {
   controls.autoRotateSpeed = 60 / ORBIT_SEC;  // OrbitControls: 2.0 = 30초/바퀴
   controls.enableDamping = true;
 
-  G = { fg, el, nodes, links, adj, active: [], idle: true, shell: 420, marks: new Map(), dist0: 0 };
+  G = { fg, el, nodes, links, adj, active: [], idle: true, shell: 420, marks: new Map(), dist0: 0, shift: 0, shiftTo: 0 };
   magnetize('');
   fg.cameraPosition({ x: 0, y: 0, z: FAKE ? 1400 : 520 });
   G.dist0 = FAKE ? 1400 : 520;
@@ -344,9 +344,9 @@ function initGraph() {
 // 그래프 영역 = 화면에서 오른쪽 패널을 뺀 부분 (Figma에서도 궤도가 왼쪽에 치우쳐 있음)
 function layout() {
   const pw = parseFloat(getComputedStyle(document.getElementById('app')).getPropertyValue('--pw'));
-  const w = document.body.classList.contains('nopanel') || innerWidth <= 900 ? innerWidth : innerWidth - pw - 32;
-  G.el.style.width = w + 'px';
-  G.fg.width(w).height(innerHeight);
+  // 캔버스는 항상 전체 화면 그대로 두고(크기 바뀌면 그래프가 튐), 시점만 패널 반만큼 옮김
+  G.shiftTo = document.body.classList.contains('nopanel') || innerWidth <= 900 ? 0 : (pw + 32) / 2;
+  if (G.fg.width() !== innerWidth || G.fg.height() !== innerHeight) { G.fg.width(innerWidth).height(innerHeight); G.fg.camera().setViewOffset(innerWidth, innerHeight, G.shift, 0, innerWidth, innerHeight); }
 }
 
 // 매 프레임: 라벨 · 선택 표시를 노드 화면 좌표에 붙이고, 줌 % · FPS 갱신
@@ -355,6 +355,10 @@ window.FPS = [];
 function overlay(now) {
   requestAnimationFrame(overlay);
   const { fg, nodes, marks } = G, cam = fg.camera(), box = document.getElementById('marks');
+  if (G.shift !== G.shiftTo) {  // 패널 폭이 바뀌면 시점을 부드럽게 이동
+    G.shift = Math.abs(G.shiftTo - G.shift) < .5 ? G.shiftTo : G.shift + (G.shiftTo - G.shift) * .15;
+    cam.setViewOffset(innerWidth, innerHeight, G.shift, 0, innerWidth, innerHeight);
+  }
   const dir = cam.getWorldDirection(new cam.position.constructor());
   const want = new Set();
   for (const n of nodes) {
