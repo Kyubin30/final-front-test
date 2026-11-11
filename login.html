@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JevRA 로그인</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=Noto+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --card:#fff; --ink:#30332f; --mute:#757b75; --line:#e9eae7; --fill:#f5f5f2; --bad:#dc2626; --shadow:0 12px 40px rgba(51,43,33,.07); }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:16px; background:#000; color:var(--ink);
+         font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif; }
+  .brand { position:fixed; top:32px; left:40px; display:flex; align-items:center; gap:12px; font:600 25px/1.4 Inter,sans-serif; color:#f4f4f2; }
+  .brand img { height:40px; width:auto; }
+  form { width:min(400px, 100%); background:var(--card); border-radius:20px; padding:32px; box-shadow:var(--shadow); }
+  h1 { font-size:22px; font-weight:600; margin:0 0 4px; }
+  .muted { color:var(--mute); font-size:13px; margin:0 0 20px; }
+  label { display:block; font-size:12px; color:var(--mute); margin:12px 0 8px; }
+  input { width:100%; padding:12px 16px; border:1px solid transparent; border-radius:10px; font:inherit; font-size:14px; color:var(--ink); background:var(--fill); outline:none; }
+  input:focus { background:var(--card); border-color:var(--line); box-shadow:0 0 0 4px rgba(48,51,47,.05); }
+  .seg { display:flex; gap:4px; padding:4px; border-radius:99px; background:var(--fill); }
+  .seg label { flex:1; margin:0; padding:8px; border-radius:99px; text-align:center; font-size:13px; color:var(--mute); cursor:pointer; }
+  .seg input { display:none; }
+  .seg label:has(:checked) { background:var(--ink); color:#fff; }
+  button { width:100%; margin-top:24px; padding:12px; border:0; border-radius:10px; background:var(--ink); color:#fff; font:inherit; font-size:15px; cursor:pointer; }
+  .err { color:var(--bad); font-size:13px; margin:12px 0 0; min-height:1em; }
+  .note { margin:16px 0 0; padding:12px; border-radius:12px; background:var(--fill); font-size:12px; color:var(--mute); line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="brand"><img src="assets/logo1-white.png" alt="">JevRA</div>
+<form id="f" novalidate>
+  <h1>로그인</h1>
+  <p class="muted" id="msg">사내 계정으로 로그인하세요</p>
+  <label>권한</label>
+  <div class="seg">
+    <label><input type="radio" name="role" value="PM" checked>PM · 인재 탐색</label>
+    <label><input type="radio" name="role" value="HR">HR · 데이터 관리</label>
+  </div>
+  <label for="id">사번 또는 이메일</label>
+  <input id="id" autocomplete="username" placeholder="예: pm01">
+  <label for="pw">비밀번호</label>
+  <input id="pw" type="password" autocomplete="current-password">
+  <p class="err" id="err" role="alert"></p>
+  <button>로그인</button>
+  <p class="note">목업: 아무 아이디·비밀번호나 입력하면 선택한 권한으로 들어갑니다. 비밀번호는 저장하지 않습니다.</p>
+</form>
+<script>
+// ponytail: 목업 인증. 실제로는 BE-01 로그인 API(세션/토큰)로 교체
+const qs = new URLSearchParams(location.search);
+if (qs.get('expired')) document.getElementById('msg').textContent = '로그인이 만료되었습니다. 다시 로그인하세요.';
+document.getElementById('f').onsubmit = e => {
+  e.preventDefault();
+  const id = document.getElementById('id').value.trim(), pw = document.getElementById('pw').value;
+  const role = document.querySelector('[name=role]:checked').value;
+  if (!id || !pw) return document.getElementById('err').textContent = '아이디와 비밀번호를 입력하세요.';
+  try { localStorage.setItem('jevra_session', JSON.stringify({ id, role, at: Date.now() })); } catch {}
+  const next = qs.get('next');
+  location.href = next && /^[\w-]+\.html(#\w*)?$/.test(next) ? next : role === 'HR' ? 'admin.html' : 'talent.html';
+};
+</script>
+</body>
+</html>

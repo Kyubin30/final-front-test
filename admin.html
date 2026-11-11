@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JevRA 관리자</title>
+<script src="profiles.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=Noto+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --card:#fff; --ink:#30332f; --mute:#757b75; --line:#e9eae7; --fill:#f5f5f2; --grid:#f2f2f0; --paper:#fefefd;
+          --acc:#2f6fed; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; --vio:#7c3aed; --shadow:0 12px 40px rgba(51,43,33,.07); }
+  * { box-sizing:border-box; }
+  body { margin:0; height:100vh; overflow:hidden; background:#000; color:var(--ink); font-family:"Noto Sans KR",-apple-system,"Apple SD Gothic Neo",sans-serif; }
+  header { position:fixed; top:0; left:0; right:0; display:flex; align-items:center; gap:24px; padding:32px 32px 0 40px; }
+  .brand { display:flex; align-items:center; gap:12px; text-decoration:none; margin-right:auto; }
+  .brand img { height:40px; width:auto; }
+  .brand small { font:500 13px "Noto Sans KR",sans-serif; color:#a9adb5; }
+  .pill { display:flex; align-items:center; gap:8px; padding:8px; background:var(--card); border-radius:99px; box-shadow:var(--shadow); }
+  .pill .who { padding:0 8px 0 16px; font-size:13px; color:var(--mute); }
+  .act { display:flex; padding:14px; border:0; border-radius:99px; background:none; color:var(--ink); cursor:pointer; }
+  .act:hover { background:var(--grid); }
+  .act svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  /* 왼쪽 메뉴 + 넓은 작업 패널, 둘 다 흰 카드 */
+  nav, main { position:fixed; top:120px; bottom:32px; background:var(--card); border-radius:20px; box-shadow:var(--shadow); }
+  nav { left:32px; width:220px; padding:12px; display:flex; flex-direction:column; gap:2px; }
+  nav a { display:flex; align-items:center; gap:8px; height:36px; padding:0 12px; border-radius:8px; color:var(--ink); text-decoration:none; font-size:14px; }
+  nav a:hover { background:var(--fill); }
+  nav a.on { background:var(--ink); color:#fff; }
+  nav a b { margin-left:auto; font:500 12px Inter,sans-serif; font-variant-numeric:tabular-nums; color:var(--mute); }
+  nav a.on b { color:rgba(255,255,255,.7); }
+  nav .sep { margin:20px 12px 6px; font-size:11px; color:var(--mute); }
+  main { left:268px; right:32px; padding:24px 28px; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#dcdcd7 transparent; }
+  h2 { font-size:20px; font-weight:600; margin:0 0 4px; }
+  h3 { font-size:15px; font-weight:500; margin:24px 0 8px; }
+  .muted { color:var(--mute); font-size:13px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .head { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .head > :first-child { margin-right:auto; }
+  label { display:block; font-size:12px; color:var(--mute); margin:12px 0 6px; }
+  input, select, textarea { padding:8px 12px; border:1px solid transparent; border-radius:10px; font:inherit; font-size:13px; color:var(--ink); background:var(--fill); outline:none; }
+  input:focus, select:focus, textarea:focus { background:var(--card); border-color:var(--line); box-shadow:0 0 0 4px rgba(48,51,47,.05); }
+  textarea { width:100%; resize:vertical; }
+  select { appearance:none; padding-right:32px; cursor:pointer;
+    background:var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23757b75' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E") no-repeat right 10px center; }
+  button { padding:8px 16px; border:0; border-radius:10px; background:var(--ink); color:#fff; font:inherit; font-size:13px; cursor:pointer; white-space:nowrap; }
+  button.ghost { background:var(--card); color:var(--ink); border:1px solid var(--line); }
+  button.danger { background:var(--bad); }
+  button:disabled { opacity:.35; cursor:default; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:8px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { position:sticky; top:-24px; background:var(--card); color:var(--mute); font-weight:500; z-index:1; white-space:nowrap; }
+  td.nw { white-space:nowrap; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.click { cursor:pointer; }
+  tr.click:hover td { background:var(--paper); }
+  tr.sel td { background:#f3f6fe; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; background:#eef2ff; color:var(--acc); white-space:nowrap; }
+  .tag.done { background:#dcfce7; color:var(--ok); }
+  .tag.busy { background:#fef3c7; color:var(--warn); }
+  .tag.bad { background:#fee2e2; color:var(--bad); }
+  .tag.gray { background:#f3f4f6; color:var(--mute); }
+  .tag.vio { background:#ede9fe; color:var(--vio); }
+  .st { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .st::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--c, var(--mute)); }
+  .st.done { --c:var(--ok); } .st.busy { --c:var(--warn); } .st.bad { --c:var(--bad); color:var(--bad); } .st.vio { --c:var(--vio); }
+  .id { font:500 12px Inter,sans-serif; color:var(--mute); }
+  .stats { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin:16px 0 8px; }
+  .stats div { padding:16px; border-radius:14px; background:var(--fill); }
+  .stats b { display:block; font:500 24px Inter,sans-serif; font-variant-numeric:tabular-nums; }
+  .stats span { font-size:12px; color:var(--mute); }
+  .drop { display:grid; place-items:center; gap:6px; padding:28px; border:1.5px dashed #d6d7d2; border-radius:16px; text-align:center; cursor:pointer; }
+  .drop.over { border-color:var(--acc); background:#f3f6fe; }
+  .msg { margin:10px 0 0; font-size:13px; }
+  .msg.ok { color:var(--ok); } .msg.err { color:var(--bad); }
+  /* 검토: 목록 | 상세 */
+  .split { display:grid; grid-template-columns:minmax(0, 1fr) 420px; gap:24px; align-items:start; }
+  .detail { position:sticky; top:0; max-height:calc(100vh - 200px); overflow:auto; padding:20px; border-radius:16px; background:var(--paper); border:1px solid var(--line); }
+  .detail h4 { margin:20px 0 8px; font-size:12px; color:var(--mute); font-weight:500; }
+  .vs { display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; }
+  .vs > div { padding:12px; border-radius:12px; background:var(--card); border:1px solid var(--line); min-height:64px; }
+  .vs .arrow { color:var(--mute); }
+  .big { font-size:15px; font-weight:600; word-break:keep-all; }
+  .ctx { white-space:pre-wrap; font-size:12px; line-height:1.6; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+  mark { background:#fef08a; border-radius:3px; padding:0 2px; }
+  .bar { height:6px; border-radius:99px; background:var(--grid); overflow:hidden; margin-top:4px; }
+  .bar i { display:block; height:100%; background:var(--acc); }
+  .confirm { display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:12px; background:#fff7ed; font-size:13px; }
+  .confirm span { margin-right:auto; }
+  .tabs { display:flex; gap:4px; }
+  .tabs a { padding:6px 12px; border-radius:99px; color:var(--mute); text-decoration:none; font-size:13px; background:var(--fill); }
+  .tabs a.on { background:var(--ink); color:#fff; }
+  .deny { position:fixed; inset:0; display:grid; place-items:center; padding:16px; }
+  .deny > div { width:min(420px, 100%); background:var(--card); border-radius:20px; padding:32px; text-align:center; }
+  @media (max-width:1100px) { .split { grid-template-columns:1fr; } .detail { position:static; } }
+  @media (max-width:800px) {
+    body { overflow:auto; height:auto; }
+    header { position:static; padding:16px; }
+    nav, main { position:static; margin:0 16px 16px; width:auto; }
+    nav { flex-direction:row; overflow-x:auto; } nav .sep { display:none; }
+    .stats { grid-template-columns:repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="admin.html" aria-label="JevRA HR 관리자"><img src="assets/logo1-white.png" alt="JevRA"><small>HR 관리자</small></a>
+  <div class="pill">
+    <span class="who" id="who"></span>
+    <a class="act" href="talent.html" title="인재 그래프" aria-label="인재 그래프"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M7 7l3 3M17 7.5l-3 3M8 17.5l2.2-3.3"/></svg></a>
+    <button class="act" id="logout" title="로그아웃" aria-label="로그아웃"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
+  </div>
+</header>
+<nav id="nav"></nav>
+<main id="app"></main>
+
+<script>
+// ---------- 인증 (목업): 세션 없으면 로그인, HR 아니면 403 ----------
+let ME = null;
+try { ME = JSON.parse(localStorage.getItem('jevra_session')); } catch {}
+if (!ME) location.replace('login.html?expired=1&next=admin.html');
+document.getElementById('logout').onclick = () => { try { localStorage.removeItem('jevra_session'); } catch {} location.href = 'login.html'; };
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = (n, w) => String(n).padStart(w, '0');
+const fmt = t => new Date(t).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+// ---------- 표준 엔티티: profiles.js 목록에 표준 ID 부여 (C01~ · S001~ · 프로젝트는 기존 J ID) ----------
+const STD = { 프로젝트: {}, 고객사: {}, 기술: {} };
+PROJECTS.forEach(p => STD.프로젝트[p.id] = { id: p.id, name: p.name, attr: `${p.client} · ${p.start.slice(0, 7)}~${p.end === '현재' ? '현재' : p.end.slice(0, 7)} · ${p.status}`, alias: PMS_ALIAS[p.id] || [] });
+Object.entries(CLIENTS).forEach(([name, alias], i) => STD.고객사['C' + pad(i + 1, 2)] = { id: 'C' + pad(i + 1, 2), name, attr: name.includes('에스케이') || name.startsWith('SK') ? 'SK 그룹사' : '', alias: alias.filter(a => a !== name) });
+Object.entries(TECHS).forEach(([name, t], i) => STD.기술['S' + pad(i + 1, 3)] = { id: 'S' + pad(i + 1, 3), name, attr: t.clas, alias: t.alias });
+const idOf = (type, name) => Object.values(STD[type]).find(e => e.name === name)?.id;
+
+// ---------- 상태: HR 판단 · 신규 엔티티 · 업로드 · 이력 ----------
+// ponytail: 목업이라 localStorage. 실제는 BE-03/05/06 API
+let A;
+try { A = JSON.parse(localStorage.getItem('jevra_admin')); } catch {}
+A = A || { decisions: {}, added: [], uploads: [], history: [] };
+const save = () => { try { localStorage.setItem('jevra_admin', JSON.stringify(A)); } catch {} };
+A.added.forEach(e => STD[e.type][e.id] = e);
+
+// ---------- 파일 · 판정 데이터: 구성원 1명 = 경력 파일 1개 ----------
+const T0 = Date.parse('2026-11-03T09:00:00');
+const FILES = PEOPLE.map((p, i) => ({ id: 'F' + pad(i + 1, 4), name: `V${pad(i + 1, 4)}.md`, person: p, at: T0 + i * 3.7e6, by: 'hr01',
+  status: i % 19 === 7 ? '실패' : i % 23 === 11 ? '처리중' : '완료', reason: i % 19 === 7 ? '프로젝트 수행이력 표 칸 수 불일치 (3행: 9칸 중 7칸)' : '' }));
+const ROUTE = { '자동 반영': 'done', '재검토': 'busy', '사람 확인': 'bad', '신규 후보': 'vio' };
+const ITEMS = [];
+for (const f of FILES) {
+  if (f.status !== '완료') continue;
+  f.person.projects.forEach((j, r) => {
+    const base = { file: f, row: r + 1, rowData: j };
+    ITEMS.push({ ...base, type: '프로젝트', raw: j.raw, std: j.std, conf: j.conf, route: j.route });
+    ITEMS.push({ ...base, type: '고객사', raw: j.clientRaw, std: idOf('고객사', j.client), conf: j.clientConf, route: j.clientRoute });
+    j.techNorm.forEach((t, k) => {
+      if (/^(-|\.|N|A|해당없음|없음)?$/i.test(t.raw.trim())) return;  // 자리채움 값은 전처리에서 빈 값 처리 (FR-01.04)
+      const same = t.raw === t.std, c = t.std ? (same ? .99 : .9 + ((r * 7 + k * 3) % 9) / 100) : .21 + ((r + k) % 5) / 20;
+      ITEMS.push({ ...base, type: '기술', raw: t.raw, std: t.std ? idOf('기술', t.std) : null, conf: c, route: t.std ? '자동 반영' : '신규 후보' });
+    });
+  });
+}
+ITEMS.forEach((it, i) => it.id = `D${pad(i + 1, 5)}`);
+// 현재 상태: HR 판단이 있으면 그것이 우선
+const cur = it => { const d = A.decisions[it.id]; return d ? { ...it, std: d.std, state: d.action } : { ...it, state: it.route === '자동 반영' ? '자동 반영' : '검토 대기' }; };
+const pending = () => ITEMS.map(cur).filter(i => i.state === '검토 대기');
+const stdName = (type, id) => id && STD[type][id] ? STD[type][id].name : '';
+const confTag = it => `<span class="tag ${ROUTE[it.route]}">${it.conf.toFixed(2)} ${it.route}</span>`;
+const stateTag = s => `<span class="st ${{ '자동 반영': 'done', '승인': 'done', '수정': 'vio', '신규 등록': 'vio', '검토 대기': 'busy' }[s] || 'gray'}">${s}</span>`;
+const fileTag = s => `<span class="st ${{ 완료: 'done', 처리중: 'busy', 대기: 'gray', 실패: 'bad' }[s]}">${s}</span>`;
+
+// ---------- 라우팅 ----------
+const PAGES = { files: ['경력 파일', files], results: ['정규화 결과', results], review: ['검토 대기', review], entities: ['표준 엔티티', entities], history: ['검토 이력', history] };
+function route() {
+  if (ME?.role !== 'HR') return deny();
+  document.getElementById('who').textContent = `${ME.id} · HR`;
+  const [k, q] = location.hash.slice(1).split('?'), key = PAGES[k] ? k : 'files', n = pending().length;
+  document.getElementById('nav').innerHTML = `<div class="sep">데이터 입력</div>` +
+    Object.entries(PAGES).map(([id, [t]], i) => (i === 2 ? '<div class="sep">사람 확인</div>' : i === 3 ? '<div class="sep">기준 · 기록</div>' : '') +
+      `<a href="#${id}" class="${id === key ? 'on' : ''}">${t}${id === 'review' && n ? `<b>${n}</b>` : ''}</a>`).join('');
+  const app = document.getElementById('app');
+  PAGES[key][1](app, new URLSearchParams(q));
+}
+addEventListener('hashchange', route);
+const go = h => location.hash === h ? route() : location.hash = h;
+
+function deny() {
+  document.querySelector('nav').remove(); document.getElementById('app').remove(); document.getElementById('who').textContent = `${ME.id} · ${ME.role}`;
+  document.body.insertAdjacentHTML('beforeend', `<div class="deny"><div>
+    <p class="st bad" style="justify-content:center">403</p><h2 style="margin:12px 0 6px">접근 권한이 없습니다</h2>
+    <p class="muted">경력 데이터 관리와 정규화 검토는 HR 권한 계정만 사용할 수 있습니다</p>
+    <div class="row" style="justify-content:center;margin-top:20px"><a href="talent.html"><button class="ghost">인재 그래프로</button></a>
+    <button onclick="localStorage.removeItem('jevra_session');location.href='login.html?next=admin.html'">HR 계정으로 로그인</button></div></div></div>`);
+}
+
+// ---------- FR-01.02 경력 파일 업로드 · 목록 ----------
+const MAX_MB = 5, EXT = /\.(md|txt)$/i;
+// 업로드한 파일은 시간이 지나며 대기 → 처리중 → 완료 (AI 처리 흉내)
+const upStatus = u => { const s = (Date.now() - u.at) / 1000; return s < 3 ? '대기' : s < 9 ? '처리중' : '완료'; };
+let ticking = 0;
+function files(el) {
+  const ups = A.uploads.map(u => ({ ...u, status: upStatus(u) }));
+  const all = [...ups.map(u => ({ id: u.id, name: u.name, who: '신규 업로드', at: u.at, by: u.by, status: u.status, reason: '', up: true })),
+               ...FILES.slice().reverse().map(f => ({ id: f.id, name: f.name, who: f.person.id, at: f.at, by: f.by, status: f.status, reason: f.reason }))];
+  const cnt = s => all.filter(f => f.status === s).length;
+  el.innerHTML = `<div class="head"><div><h2>경력 파일</h2><p class="muted" style="margin:0">구성원 경력 원본을 올리면 AI가 추출 → 전처리 → 정규화합니다</p></div></div>
+    <label class="drop" id="drop"><input type="file" id="file" accept=".md,.txt" multiple hidden>
+      <b>파일을 끌어다 놓거나 눌러서 선택</b><span class="muted">.md · .txt, 파일당 ${MAX_MB}MB 이하. 같은 내용의 파일은 중복으로 처리합니다.</span></label>
+    <p class="msg" id="upmsg" role="status"></p>
+    <div class="stats"><div><b>${all.length}</b><span>전체 파일</span></div><div><b>${cnt('완료')}</b><span>처리 완료</span></div>
+      <div><b>${cnt('처리중') + cnt('대기')}</b><span>처리 중 · 대기</span></div><div><b style="color:var(--bad)">${cnt('실패')}</b><span>처리 실패</span></div></div>
+    <h3>파일 목록</h3>
+    <table><tr><th>파일 ID</th><th>파일명</th><th>구성원</th><th>업로드</th><th>처리 상태</th><th></th></tr>
+    ${all.map(f => `<tr><td class="id">${f.id}</td><td>${esc(f.name)}</td><td>${esc(f.who)}</td><td>${fmt(f.at)} · ${esc(f.by)}</td>
+      <td>${fileTag(f.status)}${f.reason ? `<div class="muted" style="margin-top:4px">AI 처리 실패: ${esc(f.reason)}</div>` : ''}</td>
+      <td class="n">${f.status === '완료' && !f.up ? `<a href="#results?f=${f.id}"><button class="ghost">결과 보기</button></a>` : f.status === '실패' ? '<button class="ghost" disabled title="목업: 재처리 API 미연결">재처리</button>' : ''}</td></tr>`).join('')}</table>`;
+  const input = el.querySelector('#file'), drop = el.querySelector('#drop'), msg = el.querySelector('#upmsg');
+  const upload = async list => {
+    const res = [];
+    for (const f of list) {
+      if (!EXT.test(f.name)) { res.push(['err', `${f.name}: .md 또는 .txt 파일만 올릴 수 있습니다.`]); continue; }
+      if (!f.size) { res.push(['err', `${f.name}: 빈 파일입니다.`]); continue; }
+      if (f.size > MAX_MB * 2 ** 20) { res.push(['err', `${f.name}: ${MAX_MB}MB를 넘습니다.`]); continue; }
+      const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await f.arrayBuffer()))].map(b => pad(b.toString(16), 2)).join('');
+      const dup = A.uploads.find(u => u.hash === hash);
+      if (dup) { res.push(['err', `${f.name}: ${dup.name}(${dup.id})와 내용이 같아 중복으로 처리했습니다.`]); continue; }
+      A.uploads.unshift({ id: 'F' + pad(FILES.length + A.uploads.length + 1, 4), name: f.name, size: f.size, hash, at: Date.now(), by: ME.id });
+      res.push(['ok', `${f.name} 업로드 완료`]);
+    }
+    save(); route();
+    document.getElementById('upmsg').innerHTML = res.map(([c, t]) => `<div class="msg ${c}">${esc(t)}</div>`).join('');
+  };
+  input.onchange = () => { upload([...input.files]); input.value = ''; };
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); upload([...e.dataTransfer.files]); };
+  // 처리 중인 업로드가 있으면 상태 갱신
+  clearTimeout(ticking);
+  if (ups.some(u => u.status !== '완료')) ticking = setTimeout(() => { if (location.hash.startsWith('#files') || !location.hash) { const m = document.getElementById('upmsg').innerHTML; route(); document.getElementById('upmsg').innerHTML = m; } }, 1000);
+}
+
+// ---------- FR-01.03~07 파일별 추출 · 전처리 · 정규화 결과 ----------
+function results(el, q) {
+  const done = FILES.filter(f => f.status === '완료'), f = done.find(x => x.id === q.get('f')) || done[0];
+  const its = ITEMS.filter(i => i.file === f).map(cur), p = f.person;
+  const bad = j => j.end !== '현재' && j.start > j.end;
+  el.innerHTML = `<div class="head"><div><h2>정규화 결과</h2><p class="muted" style="margin:0">원문 행 → 추출값 → 표준 ID. 확신도에 따라 자동 반영 · 재검토 · 사람 확인으로 나뉩니다.</p></div>
+      <select id="pick">${done.map(x => `<option value="${x.id}" ${x === f ? 'selected' : ''}>${x.id} · ${x.name} (${x.person.id})</option>`).join('')}</select></div>
+    <div class="stats"><div><b>${p.projects.length}</b><span>추출된 이력 행</span></div><div><b>${its.length}</b><span>정규화 대상 표기</span></div>
+      <div><b>${its.filter(i => i.state !== '검토 대기').length}</b><span>반영 완료</span></div><div><b style="color:var(--warn)">${its.filter(i => i.state === '검토 대기').length}</b><span>HR 검토 대기</span></div></div>
+    <h3>추출 결과 · 프로젝트 수행이력</h3>
+    <table><tr><th>행</th><th>프로젝트</th><th>도메인</th><th>고객사</th><th>수행역할</th><th>보유기술 (원문)</th><th>기간</th></tr>
+    ${p.projects.map((j, r) => `<tr><td class="id">${r + 1}</td><td>${esc(j.raw)}</td><td>${esc(j.domain).split(' / ').map(d => `<span class="tag gray">${d}</span>`).join(' ')}</td>
+      <td>${esc(j.clientRaw)}</td><td>${esc(j.role).split('; ').join('<br>')}</td><td>${esc(j.techRaw)}</td>
+      <td>${j.start} ~ ${j.end}${bad(j) ? ' <span class="tag bad">시작일 > 종료일</span>' : ''}</td></tr>`).join('')}</table>
+    <h3>정규화 결과</h3>
+    <table><tr><th>행</th><th>유형</th><th>원문 표기</th><th>표준 엔티티</th><th>Jev 확신도</th><th>상태</th><th></th></tr>
+    ${its.map(i => `<tr><td class="id">${i.row}</td><td>${i.type}</td><td>${esc(i.raw)}</td>
+      <td>${i.std ? `<span class="id">${i.std}</span> ${esc(stdName(i.type, i.std))}` : '<span class="muted">미매핑</span>'}</td>
+      <td>${confTag(i)}</td><td>${stateTag(i.state)}</td>
+      <td class="n">${i.state === '검토 대기' ? `<a href="#review?d=${i.id}"><button class="ghost">검토</button></a>` : ''}</td></tr>`).join('')}</table>
+    <h3>발령 이력 · 출처 꼬리표</h3>
+    ${p.careers.map(c => `<p class="muted" style="margin:8px 0 4px">${esc(c.team)} · ${c.start} ~ ${c.end}</p><div class="ctx">${esc(c.ctx)}</div>`).join('') || '<p class="muted">없음</p>'}`;
+  el.querySelector('#pick').onchange = e => go('#results?f=' + e.target.value);
+}
+
+// ---------- FR-02.01~05 HR 검토: 목록 · 상세 · 승인/수정/신규 등록 ----------
+let RF = { type: '', route: '' };
+function review(el, q) {
+  const list = pending().filter(i => (!RF.type || i.type === RF.type) && (!RF.route || i.route === RF.route));
+  const sel = list.find(i => i.id === q.get('d')) || list[0];
+  // 같은 원문 표기가 여러 파일에서 나온 횟수
+  const freq = raw => ITEMS.filter(i => i.raw === raw).length;
+  el.innerHTML = `<div class="head"><div><h2>검토 대기 <span class="muted">${list.length}건</span></h2>
+      <p class="muted" style="margin:0">Jev가 확신하지 못한 표기입니다. 승인 · 수정하거나 새 표준 엔티티로 등록하세요.</p></div>
+      <div class="row"><select id="ft"><option value="">모든 유형</option>${Object.keys(STD).map(t => `<option ${RF.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <select id="fr"><option value="">모든 판정</option>${['재검토', '사람 확인', '신규 후보'].map(t => `<option ${RF.route === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
+    ${list.length ? `<div class="split"><div><table><tr><th>유형</th><th>원문 표기</th><th>Jev 후보</th><th>판정</th><th class="n">발생</th></tr>
+      ${list.map(i => `<tr class="click ${i === sel ? 'sel' : ''}" data-d="${i.id}"><td class="nw">${i.type}</td><td><b>${esc(i.raw)}</b><div class="id">${i.file.name} · ${i.row}행</div></td>
+        <td>${i.std ? esc(stdName(i.type, i.std)) : '<span class="muted">없음</span>'}</td><td class="nw">${confTag(i)}</td><td class="n">${freq(i.raw)}</td></tr>`).join('')}</table></div>
+      <div class="detail" id="detail"></div></div>` : '<p class="muted" style="margin-top:40px;text-align:center">검토할 항목이 없습니다.</p>'}`;
+  el.querySelector('#ft').onchange = e => { RF.type = e.target.value; go('#review'); };
+  el.querySelector('#fr').onchange = e => { RF.route = e.target.value; go('#review'); };
+  el.querySelectorAll('tr[data-d]').forEach(tr => tr.onclick = () => go('#review?d=' + tr.dataset.d));
+  if (sel) detail(el.querySelector('#detail'), sel);
+}
+
+// Jev 판정 후보 1·2위 (목업: 2위는 같은 유형의 다른 엔티티)
+function candidates(it) {
+  const ids = Object.keys(STD[it.type]), first = it.std, rest = ids.filter(id => id !== first);
+  const second = rest[(it.raw.length * 7 + it.row) % rest.length];
+  const out = first ? [[first, it.conf]] : [];
+  out.push([second, first ? +((1 - it.conf) * .7).toFixed(2) : +(it.conf * .9).toFixed(2)]);
+  return out;
+}
+function reason(it) {
+  const e = STD[it.type][it.std], j = it.rowData;
+  if (!e) return `원문 "${it.raw}"과(와) 일치하는 표준 ${it.type}이(가) 별칭 목록과 후보 검색에서 모두 확신도 기준(0.70)을 넘지 못했습니다. 업무 역량 표기이거나 새 ${it.type}일 수 있습니다.`;
+  const alias = e.alias.includes(it.raw) || e.name === it.raw;
+  return `${alias ? '별칭 테이블에 같은 표기가 있고' : '별칭 테이블에는 없지만 표기가 유사하며'}, 같은 행의 ${it.type === '고객사' ? `프로젝트 "${j.raw}"` : `고객사 "${j.clientRaw}"`}와 기간 ${j.start.slice(0, 7)}~${j.end.slice(0, 7)}이(가) 표준 ${it.type} "${e.name}"의 문맥과 겹칩니다. `
+    + (it.route === '사람 확인' ? '다만 계열사 · 계약 주체가 다를 수 있어 사람 확인이 필요합니다.' : '1·2위 후보 확률 차이가 작아 재검토로 분류했습니다.');
+}
+function detail(el, it) {
+  const j = it.rowData, mark = s => esc(s).split(esc(it.raw)).join(`<mark>${esc(it.raw)}</mark>`);
+  const ctx = it.file.person.careers.find(c => c.start === j.start);
+  el.innerHTML = `<div class="row"><span class="tag gray">${it.type}</span>${confTag(it)}<span class="id" style="margin-left:auto">${it.id}</span></div>
+    <h4>원문 표기 → Jev 정규화 결과</h4>
+    <div class="vs"><div><div class="muted">원문</div><div class="big">${esc(it.raw)}</div></div><span class="arrow">→</span>
+      <div><div class="muted">${it.std ? `<span class="id">${it.std}</span>` : '표준 ID 없음'}</div><div class="big">${it.std ? esc(stdName(it.type, it.std)) : '<span class="tag vio">신규 엔티티 후보</span>'}</div>
+      ${it.std ? `<div class="muted">${esc(STD[it.type][it.std].attr)}</div>` : ''}</div></div>
+    <h4>판정 근거</h4><p style="margin:0;font-size:13px;line-height:1.6">${esc(reason(it))}</p>
+    <h4>비교한 후보</h4>
+    ${candidates(it).map(([id, p], k) => `<div style="margin:6px 0"><div class="row" style="font-size:13px"><span class="id">${k + 1}위 ${id}</span>${esc(stdName(it.type, id))}<span class="id" style="margin-left:auto">${p.toFixed(2)}</span></div><div class="bar"><i style="width:${p * 100}%"></i></div></div>`).join('')}
+    <h4>원문 위치 · ${esc(it.file.name)} ${it.row}행</h4>
+    <div class="ctx">프로젝트: ${mark(j.raw)}\n고객사: ${mark(j.clientRaw)}\n수행역할: ${esc(j.role)}\n보유기술: ${mark(j.techRaw)}\n기간: ${j.start} ~ ${j.end}</div>
+    ${ctx ? `<h4>같은 기간 발령 이력</h4><div class="ctx">${mark(ctx.ctx)}</div>` : ''}
+    <div id="acts" style="margin-top:20px"></div>`;
+  actions(el.querySelector('#acts'), it);
+}
+function decide(it, action, std, why) {
+  A.decisions[it.id] = { action, std, reason: why, by: ME.id, at: Date.now() };
+  A.history.unshift({ at: Date.now(), by: ME.id, action, type: it.type, raw: it.raw, item: it.id, file: it.file.name, from: it.std, to: std, reason: why });
+  save();
+  const next = pending()[0];
+  go(next ? '#review?d=' + next.id : '#review');
+}
+function actions(el, it, mode = '') {
+  const opts = Object.values(STD[it.type]);
+  if (mode === 'approve') {
+    el.innerHTML = `<div class="confirm"><span><b>${esc(it.raw)}</b> → <b>${esc(stdName(it.type, it.std))}</b>(으)로 확정할까요? 같은 표기는 다음부터 Jev 없이 바로 매핑됩니다.</span>
+      <button class="ghost" id="no">취소</button><button id="yes">승인</button></div>`;
+    el.querySelector('#no').onclick = () => actions(el, it);
+    el.querySelector('#yes').onclick = e => { e.target.disabled = true; decide(it, '승인', it.std, ''); };
+  } else if (mode === 'edit') {
+    el.innerHTML = `<label>바꿀 표준 ${it.type}</label>
+      <input list="std-opts" id="to" placeholder="ID 또는 이름으로 검색" style="width:100%"><datalist id="std-opts">${opts.map(o => `<option value="${o.id} ${esc(o.name)}">`).join('')}</datalist>
+      <label>수정 사유</label><textarea id="why" rows="2" placeholder="예: 계약 주체가 SK(주)가 아니라 SK텔레콤"></textarea>
+      <p class="msg err" id="err"></p><div class="row" style="justify-content:flex-end"><button class="ghost" id="no">취소</button><button id="yes">수정 반영</button></div>`;
+    el.querySelector('#no').onclick = () => actions(el, it);
+    el.querySelector('#yes').onclick = () => {
+      const to = el.querySelector('#to').value.split(' ')[0], why = el.querySelector('#why').value.trim(), err = el.querySelector('#err');
+      if (!STD[it.type][to]) return err.textContent = '목록에 있는 표준 엔티티를 고르세요.';
+      if (to === it.std) return err.textContent = '지금 매핑과 같은 엔티티입니다.';
+      if (!why) return err.textContent = '수정 사유를 입력하세요.';
+      decide(it, '수정', to, why);
+    };
+  } else if (mode === 'new') {
+    el.innerHTML = `<label>공식명</label><input id="nm" value="${esc(it.raw)}" style="width:100%">
+      ${it.type === '기술' ? `<label>분류</label><input id="cl" placeholder="예: AI_프레임워크" style="width:100%">` : ''}
+      <label>비슷한 기존 표준 엔티티</label><div id="dups" class="muted"></div>
+      <p class="msg err" id="err"></p><div class="row" style="justify-content:flex-end"><button class="ghost" id="no">취소</button><button id="yes">새로 등록</button></div>`;
+    const nm = el.querySelector('#nm'), dups = el.querySelector('#dups');
+    const norm = s => s.toLowerCase().replace(/[\s().·주]/g, '');
+    const check = () => {
+      const k = norm(nm.value), hit = k ? opts.filter(o => [o.name, ...o.alias].some(a => norm(a).includes(k) || k.includes(norm(a)))).slice(0, 5) : [];
+      dups.innerHTML = hit.length ? hit.map(o => `<div class="row" style="margin:4px 0"><span class="id">${o.id}</span>${esc(o.name)}<button class="ghost" style="margin-left:auto" data-id="${o.id}">이걸로 매핑</button></div>`).join('') : '없음 · 새로 등록해도 됩니다.';
+      dups.querySelectorAll('button').forEach(b => b.onclick = () => decide(it, '수정', b.dataset.id, '신규 후보 → 기존 엔티티로 매핑'));
+    };
+    nm.oninput = check; check();
+    el.querySelector('#no').onclick = () => actions(el, it);
+    el.querySelector('#yes').onclick = () => {
+      const name = nm.value.trim(), err = el.querySelector('#err');
+      if (!name) return err.textContent = '공식명을 입력하세요.';
+      if (opts.some(o => norm(o.name) === norm(name))) return err.textContent = '같은 이름의 표준 엔티티가 이미 있습니다. 위 목록에서 매핑하세요.';
+      const pre = { 프로젝트: 'J', 고객사: 'C', 기술: 'S' }[it.type], w = it.type === '기술' ? 3 : 2;
+      const id = pre + pad(Math.max(...Object.keys(STD[it.type]).map(x => +x.slice(1))) + 1, w);
+      const e = { id, type: it.type, name, attr: el.querySelector('#cl')?.value.trim() || 'HR 등록', alias: name === it.raw ? [] : [it.raw], added: true };
+      A.added.push(e); STD[it.type][id] = e;
+      decide(it, '신규 등록', id, `새 표준 ${it.type} 등록`);
+    };
+  } else {
+    el.innerHTML = `<div class="row" style="justify-content:flex-end">
+      <button class="ghost" data-m="new">신규 등록</button><button class="ghost" data-m="edit">수정</button>
+      <button data-m="approve" ${it.std ? '' : 'disabled title="표준 ID가 없는 항목은 승인할 수 없습니다"'}>승인</button></div>`;
+    el.querySelectorAll('button').forEach(b => b.onclick = () => actions(el, it, b.dataset.m));
+  }
+}
+
+// ---------- FR-01.01 · 02.05 표준 엔티티 ----------
+let ET = '고객사', EQ = '';
+function entities(el) {
+  const k = EQ.toLowerCase(), list = Object.values(STD[ET]).filter(e => !k || [e.id, e.name, ...e.alias].some(a => a.toLowerCase().includes(k)));
+  const used = id => ITEMS.filter(i => cur(i).std === id).length;
+  el.innerHTML = `<div class="head"><div><h2>표준 엔티티</h2><p class="muted" style="margin:0">정규화의 기준 목록(standard.yml). 별칭은 이미 판정된 표기로, 다음 판정 때 Jev 호출 없이 바로 매핑됩니다.</p></div>
+      <input id="eq" placeholder="ID · 이름 · 별칭 검색" value="${esc(EQ)}"></div>
+    <div class="tabs">${Object.keys(STD).map(t => `<a href="#entities" data-t="${t}" class="${t === ET ? 'on' : ''}">${t} ${Object.keys(STD[t]).length}</a>`).join('')}</div>
+    <table style="margin-top:12px"><tr><th>표준 ID</th><th>공식명</th><th>속성</th><th>별칭</th><th class="n">연결된 표기</th></tr>
+    ${list.map(e => `<tr><td class="id">${e.id}</td><td>${esc(e.name)} ${e.added ? '<span class="tag vio">HR 등록</span>' : ''}</td><td class="muted">${esc(e.attr)}</td>
+      <td>${e.alias.map(a => `<span class="tag gray">${esc(a)}</span>`).join(' ')}</td><td class="n">${used(e.id)}</td></tr>`).join('')}</table>`;
+  el.querySelectorAll('[data-t]').forEach(a => a.onclick = e => { e.preventDefault(); ET = a.dataset.t; route(); });
+  const eq = el.querySelector('#eq');
+  eq.oninput = () => { EQ = eq.value; route(); const n = document.getElementById('eq'); n.focus(); n.setSelectionRange(EQ.length, EQ.length); };
+}
+
+// ---------- FR-02.06 검토 이력 ----------
+function history(el) {
+  const h = A.history;
+  el.innerHTML = `<div class="head"><div><h2>검토 이력</h2><p class="muted" style="margin:0">HR이 승인 · 수정 · 신규 등록한 기록. 수정 사례는 Jev 오답 분석에 쓰입니다.</p></div>
+      ${h.length ? '<button class="ghost" id="reset" title="목업 데이터 초기화">목업 초기화</button>' : ''}</div>
+    ${h.length ? `<table><tr><th>시각</th><th>검토자</th><th>처리</th><th>유형</th><th>원문 표기</th><th>변경 전 → 후</th><th>사유</th></tr>
+    ${h.map(r => `<tr><td>${fmt(r.at)}</td><td>${esc(r.by)}</td><td>${stateTag(r.action)}</td><td>${r.type}</td><td>${esc(r.raw)}<div class="id">${esc(r.file)}</div></td>
+      <td>${r.from ? `<span class="id">${r.from}</span> ${esc(stdName(r.type, r.from))}` : '<span class="muted">없음</span>'} → <span class="id">${r.to}</span> ${esc(stdName(r.type, r.to))}</td>
+      <td class="muted">${esc(r.reason) || '-'}</td></tr>`).join('')}</table>` : '<p class="muted" style="margin-top:40px;text-align:center">아직 검토한 항목이 없습니다.</p>'}`;
+  const r = el.querySelector('#reset');
+  if (r) r.onclick = () => { if (r.dataset.sure) { localStorage.removeItem('jevra_admin'); location.reload(); } else { r.dataset.sure = 1; r.textContent = '한 번 더 누르면 초기화'; r.classList.add('danger'); } };
+}
+
+if (ME) route();
+</script>
+</body>
+</html>
